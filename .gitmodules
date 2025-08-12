@@ -1,0 +1,4 @@
+[submodule "notebooks/runs-n-poses"]
+	path = notebooks/runs-n-poses
+	url = https://github.com/plinder-org/runs-n-poses.git
+	branch = main
