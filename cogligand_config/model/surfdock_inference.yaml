@@ -1,8 +1,10 @@
 benchmark: runsNposes
 repeat_index: 0
 
-# Path to the SurfDock git repository
-surfdock_dir: ${oc.env:PROJECT_ROOT}/forks/SurfDock
+# Path to the SurfDock installation (needs extracted tools + editable ESM install)
+# NOTE: tools/MSMS/APBS and ESM library are not in the git submodule; point to the
+# local installation that has them. Model weights are served from forks/SurfDock.
+surfdock_dir: /home/aoxu/projects/SurfDock
 # Precomputed SO3/torus arrays required at import time by SurfDock internals
 precomputed_arrays: /home/aoxu/projects/precomputed/precomputed_arrays
 surfdock_env: SurfDock  # conda env name
