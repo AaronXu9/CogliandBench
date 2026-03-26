@@ -2,3 +2,6 @@
 	path = notebooks/runs-n-poses
 	url = https://github.com/plinder-org/runs-n-poses.git
 	branch = main
+[submodule "forks/SurfDock"]
+	path = forks/SurfDock
+	url = https://github.com/CAODH/SurfDock.git
