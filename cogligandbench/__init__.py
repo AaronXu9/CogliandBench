@@ -296,6 +296,9 @@ def resolve_method_input_csv_path(method: str, dataset: str, pocket_only_baselin
         raise ValueError(f"Invalid method: {method}")
 
 
+from cogligandbench.engine import dock_engine  # noqa: F401
+
+
 def register_custom_omegaconf_resolvers():
     """Register custom OmegaConf resolvers."""
     OmegaConf.register_new_resolver(
