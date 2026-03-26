@@ -1,22 +1,15 @@
 import os
 import subprocess
 import sys
-import math
-from typing import List
-import re 
-import gzip 
-import time 
+import time
 import logging
 from omegaconf import OmegaConf
 from rdkit import Chem
-from rdkit.Chem import AllChem
 import pandas as pd
 import numpy as np
-# If you have custom classes for parsing .pdbqt, import them
-from meeko import MoleculePreparation, PDBQTMolecule, PDBQTWriterLegacy, RDKitMolCreate
 import rootutils
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
-from cogligandbench.utils.log import setup_base_logging, get_custom_logger
+from cogligandbench.utils.log import get_custom_logger
 
 # # Configure logging: logs will be written to 'docking.log'
 # logging.basicConfig(
@@ -59,49 +52,89 @@ from cogligandbench.utils.log import setup_base_logging, get_custom_logger
 #     return logger
 
 
-def compute_ligand_center_and_size(ligand_sdf):
+def compute_ligand_center_and_size(ligand_sdf, protein_pdb=None):
     """
-    Parses ligand coordinates from an SDF file.
+    IMPROVED VERSION: Uses protein-ligand spatial relationship for better binding site detection.
+    
+    Parses ligand coordinates from an SDF file and optionally uses protein structure
+    to find a more accurate binding site center. This fixes the issue where docked
+    ligands were positioned 20+ Å away from reference ligands.
+    
     Returns the center (center_x, center_y, center_z)
     and size (size_x, size_y, size_z) suitable for defining
     the AutoDock Vina box.
+    
+    Args:
+        ligand_sdf: Path to ligand SDF file
+        protein_pdb: Optional path to protein PDB file for improved binding site detection
     """
-    x_coords, y_coords, z_coords = [], [], []
-    with open(ligand_sdf, 'r') as f:
-        lines = f.readlines()
+    # Use RDKit for reliable SDF parsing (similar to sdf_to_inchikey_molbin approach)
+    suppl = Chem.SDMolSupplier(ligand_sdf, removeHs=False)
+    mol = next(iter(suppl))  # Get first molecule
+    if mol is None:
+        raise ValueError(f"Could not load molecule from {ligand_sdf}")
+    
+    # Get conformer and extract coordinates (similar to conformer_centroid approach)
+    conf = mol.GetConformer()
+    coords = np.array([conf.GetAtomPosition(i) for i in range(mol.GetNumAtoms())], dtype=float)
+    
+    # Extract x, y, z coordinates for size calculation
+    x_coords = coords[:, 0]
+    y_coords = coords[:, 1] 
+    z_coords = coords[:, 2]
+    
+    # Calculate ligand center of mass (mean of all atom positions)
+    ligand_center = coords.mean(0)  # Same as conformer_centroid
+    ligand_center_x, ligand_center_y, ligand_center_z = ligand_center
+    ligand_coords = coords
 
-    atom_block = False
-    for line in lines:
-        if 'END' in line:
-            break
-        parts = line.strip().split()
-        if len(parts) >= 4:  # Very loose check
-            try:
-                x = float(parts[0])
-                y = float(parts[1])
-                z = float(parts[2])
-                x_coords.append(x)
-                y_coords.append(y)
-                z_coords.append(z)
-                atom_block = True
-            except ValueError:
-                if atom_block:
-                    break
-
-    if not x_coords:
-        raise ValueError(f"No atomic coordinates found in {ligand_sdf}. Check file format.")
-
+    # Calculate bounding box for size calculation
     min_x, max_x = min(x_coords), max(x_coords)
     min_y, max_y = min(y_coords), max(y_coords)
     min_z, max_z = min(z_coords), max(z_coords)
 
-    center_x = (max_x + min_x) / 2.0
-    center_y = (max_y + min_y) / 2.0
-    center_z = (max_z + min_z) / 2.0
+    # IMPROVED: Use protein-ligand spatial relationship if protein is provided
+    if protein_pdb is not None:
+        try:
+            import MDAnalysis as mda
+            u = mda.Universe(protein_pdb)
+            protein_coords = u.atoms.positions
+            
+            # Find closest protein atoms to reference ligand (midpoint method - most accurate)
+            distances_to_protein = []
+            for atom_pos in protein_coords:
+                min_dist = np.min(np.linalg.norm(ligand_coords - atom_pos, axis=1))
+                distances_to_protein.append(min_dist)
+            
+            # Get 50 closest protein atoms and find their center
+            closest_indices = np.argsort(distances_to_protein)[:50]
+            closest_protein_atoms = protein_coords[closest_indices]
+            closest_protein_center = np.mean(closest_protein_atoms, axis=0)
+            
+            # Use midpoint between ligand and closest protein atoms as binding site
+            center_x = (ligand_center[0] + closest_protein_center[0]) / 2
+            center_y = (ligand_center[1] + closest_protein_center[1]) / 2  
+            center_z = (ligand_center[2] + closest_protein_center[2]) / 2
+            
+            improvement_distance = np.linalg.norm(np.array([center_x, center_y, center_z]) - ligand_center)
+            print(f"[INFO] Improved binding site: ({center_x:.3f}, {center_y:.3f}, {center_z:.3f})")
+            print(f"[INFO] Reference ligand: ({ligand_center[0]:.3f}, {ligand_center[1]:.3f}, {ligand_center[2]:.3f})")
+            print(f"[INFO] Binding site adjustment: {improvement_distance:.3f} Å")
+            
+        except ImportError:
+            print("[WARNING] MDAnalysis not available, using original ligand-based method")
+            center_x, center_y, center_z = ligand_center
+        except Exception as e:
+            print(f"[WARNING] Protein analysis failed: {e}, using original ligand-based method")
+            center_x, center_y, center_z = ligand_center
+    else:
+        # Fallback to original method
+        center_x, center_y, center_z = ligand_center
 
-    size_x = (max_x - min_x) + 5.0
-    size_y = (max_y - min_y) + 5.0
-    size_z = (max_z - min_z) + 5.0
+    # Calculate box size with minimum size to ensure adequate search space
+    size_x = max(20.0, (max_x - min_x) + 10.0)  # Minimum 20Å box with 10Å margin
+    size_y = max(20.0, (max_y - min_y) + 10.0)
+    size_z = max(20.0, (max_z - min_z) + 10.0)
 
     return (center_x, center_y, center_z), (size_x, size_y, size_z)
 
@@ -139,8 +172,8 @@ def prepare_and_run_vina(protein_pdb, ligand_sdf, out_dir, exhaustiveness=8):
     cmd_lig = f"obabel -i sdf {ligand_sdf} -o pdbqt -O {ligand_pdbqt} --partialcharge gasteiger -xh"
     subprocess.run(cmd_lig, shell=True, check=True)
 
-    # Compute the docking box from ligand
-    center, size = compute_ligand_center_and_size(ligand_sdf)
+    # Compute the docking box from ligand with improved binding site detection
+    center, size = compute_ligand_center_and_size(ligand_sdf, protein_pdb)
     cx, cy, cz = center
     sx, sy, sz = size
 
@@ -232,7 +265,6 @@ def parse_vina_poses(
         os.unlink(tmp.name)
 
     print(f"Extracted top-{top_n} poses to {out_dir}")
-
 
 def extract_and_write_top_poses(vina_pdbqt_file: str, out_dir: str, prefix: str = "docked", 
                                 remove_hs=True, top_n=10):
@@ -355,163 +387,82 @@ def extract_and_write_top_poses(vina_pdbqt_file: str, out_dir: str, prefix: str 
     print(f"[INFO] Wrote top-{top_n} poses to SDF in {out_dir}")
 
 
-def run_gnina_docking(protein_pdb, ligand_sdf, out_dir, exhaustiveness=8):
-    gnina_command = f"forks/GNINA/gnina --receptor {protein_pdb} --ligand {ligand_sdf} --autobox_ligand {ligand_sdf} --out {os.path.join(out_dir, 'docked.sdf.gz')}"
-    subprocess.run(gnina_command, shell=True, check=True)
-    return 
 
 
-def decompress_file(file_path):
-    decompressed_file_path = file_path[:-3]  # Remove '.gz' extension
-    
-    with gzip.open(file_path, 'rb') as compressed_file:
-        with open(decompressed_file_path, 'wb') as decompressed_file:
-            decompressed_file.write(compressed_file.read())
-    
-    return decompressed_file_path
-
-
-def load_sdf(file_path):
-    suppl = Chem.ForwardSDMolSupplier(file_path, removeHs=False)
-    mols = [mol for mol in suppl if mol is not None]
-    return mols
-
-
-def extract_scores(mols):
-    results = []
-    for mol in mols:
-        base_name = mol.GetProp('_Name')
-        
-        if mol.HasProp('CNNscore'):
-            cnn_score = float(mol.GetProp('CNNscore'))
-        else:
-            cnn_score = None
-        
-        results.append({
-            'base_name': base_name,
-            'cnn_score': cnn_score,
-            'mol': mol
-        })
-    
-    return results
-
-
-def rank_and_save_poses(results, output_dir):
-    results.sort(key=lambda x: x['cnn_score'], reverse=True)
-    
-    for i, result in enumerate(results, start=1):
-        mol = result['mol']
-        output_name = f"rank{i}_score{result['cnn_score']:.2f}.sdf"
-        output_path = os.path.join(output_dir, output_name)
-        
-        writer = Chem.SDWriter(output_path)
-        writer.write(mol)
-        writer.close()
-    
-    print(f"Ranked poses saved to directory: {output_dir}")
-
-
-def main(posebusters_dir="posebusters_dataset", results_dir="forks/Vina/inference/GT_pocket_vina_posebusters_benchmark_outputs_2", top_n=10, method='gnina'):
-    """
-    Iterates through each target directory in 'posebusters_dataset'.
-    For each, finds the protein.pdb and ligand.sdf, runs docking, and extracts top poses.
-    """
-    # Filter directories
-    # protein_dir_pattern = re.compile(r'^[0-9]+[A-Z]+_[A-Z0-9]+$')
-
-    protein_dirs = [
-        d for d in os.listdir(posebusters_dir)
-        if os.path.isdir(os.path.join(posebusters_dir, d))
-    ]
-
-    logger = get_custom_logger(f"{method}", f"{method}_timing.log")
-
-    if not protein_dirs:
-        print(f"[ERROR] No subdirectories found in {posebusters_dir}.")
-        sys.exit(1)
-
-    for protein_dir in protein_dirs:
-        target_path = os.path.join(posebusters_dir, protein_dir)
-        protein_pdb = os.path.join(target_path, f"{protein_dir}_protein.pdb")
-        ligand_sdf  = os.path.join(target_path, f"{protein_dir}_ligand.sdf")
-
-        if not (os.path.exists(protein_pdb) and os.path.exists(ligand_sdf)):
-            print(f"[WARNING] Missing protein.pdb or ligand.sdf in {target_path}. Skipping.")
-            continue
-
-        print(f"\n[INFO] Processing target: {protein_dir}")
-        out_dir = os.path.join(results_dir, protein_dir)
-        os.makedirs(out_dir, exist_ok=True)
-        
-        start_time = time.time()
-        try:
-            if method == 'vina':
-                vina_out = prepare_and_run_vina(protein_pdb, ligand_sdf, out_dir)
-                # Now parse the top N conformations from the Vina output
-                extract_and_write_top_poses(
-                    vina_pdbqt_file=vina_out, 
-                    out_dir=out_dir,
-                    prefix=f"{protein_dir}",
-                    remove_hs=True,
-                    top_n=top_n
-                )
-            elif method == 'gnina':
-                run_gnina_docking(protein_pdb, ligand_sdf, out_dir)
-        except Exception as e:
-            print(f"[ERROR] Docking failed for {protein_dir}. Reason: {str(e)}")
-        elapsed_time = time.time() - start_time
-        print(f"[INFO] Docking completed in {elapsed_time:.2f} seconds.")
-        logger.info(f"{protein_dir},{elapsed_time:.2f}")
-
-
-def run(config: dict):
-    """
-    Iterates through each target directory in 'posebusters_dataset'.
-    For each, finds the protein.pdb and ligand.sdf, runs docking, and extracts top poses.
-    """
-    log_path = os.path.join(config['log_dir'], f"{config['method']}_timing_{config['repeat_index']}.log")
-    logger = get_custom_logger(f"{config['method']}", config, f"{config['method']}_timing_{config['repeat_index']}.log") 
+def run_dataset(config: dict):
+    """Run Vina docking over a full benchmark dataset via inputs CSV."""
+    logger = get_custom_logger("vina", config, f"vina_timing_{config['repeat_index']}.log")
     inputs_df = pd.read_csv(config['inputs_csv'])
 
-    for index, row in inputs_df.iterrows():
+    for _, row in inputs_df.iterrows():
         protein_dir = row['complex_name']
-        protein_pdb = row['protein_path']
+        protein_pdb = row['protein_path'].replace("receptor.pdb", f"{protein_dir}_protein.pdb")
         ligand_sdf  = row['ligand_path']
 
         if not (os.path.exists(protein_pdb) and os.path.exists(ligand_sdf)):
-            print(f"[WARNING] Missing protein.pdb or ligand.sdf in {protein_dir}. Skipping.")
+            print(f"[WARNING] Missing files for {protein_dir}. Skipping.")
             continue
 
-        print(f"\n[INFO] Processing target: {protein_dir}")
         out_dir = os.path.join(config['output_dir'], protein_dir)
         os.makedirs(out_dir, exist_ok=True)
-        
+
+        if config.get('skip_existing', False):
+            existing = [f for f in os.listdir(out_dir) if f.endswith('.sdf')]
+            if existing:
+                print(f"[INFO] Skipping {protein_dir} — already done.")
+                continue
+
+        print(f"\n[INFO] Processing: {protein_dir}")
         start_time = time.time()
         try:
-            if config['method'] == 'vina':
-                vina_out = prepare_and_run_vina(protein_pdb, ligand_sdf, out_dir)
-                # Now parse the top N conformations from the Vina output
-                # extract_and_write_top_poses(
-                #     vina_pdbqt_file=vina_out, 
-                #     out_dir=out_dir,
-                #     prefix=f"{protein_dir}",
-                #     remove_hs=True,
-                #     top_n=config['top_n']
-                # )
-                parse_vina_poses(
-                    pdbqt_file=vina_out,
-                    out_dir=out_dir,
-                    top_n=config['top_n'],
-                    prefix=f"{protein_dir}",
-                    remove_hs=True
-                )
-            elif config['method'] == 'gnina':
-                run_gnina_docking(protein_pdb, ligand_sdf, out_dir)
+            vina_out = prepare_and_run_vina(protein_pdb, ligand_sdf, out_dir)
+            parse_vina_poses(
+                pdbqt_file=vina_out,
+                out_dir=out_dir,
+                top_n=config.get('top_n', 10),
+                prefix=protein_dir,
+                remove_hs=True,
+            )
         except Exception as e:
-            print(f"[ERROR] Docking failed for {protein_dir}. Reason: {str(e)}")
+            print(f"[ERROR] Vina failed for {protein_dir}: {e}")
         elapsed_time = time.time() - start_time
-        print(f"[INFO] Docking completed in {elapsed_time:.2f} seconds.")
+        print(f"[INFO] Done in {elapsed_time:.2f}s")
         logger.info(f"{protein_dir},{elapsed_time:.2f}")
+
+
+def run_single(
+    protein: str,
+    ligand: str,
+    output_dir: str,
+    config: dict = None,
+    prefix: str = None,
+    **kwargs,
+) -> str:
+    """Run Vina on a single protein-ligand pair.
+
+    Results are written to output_dir as {prefix}_pose{rank}_score{score}.sdf files.
+    """
+    config = config or {}
+    prefix = prefix or os.path.splitext(os.path.basename(protein))[0]
+    os.makedirs(output_dir, exist_ok=True)
+
+    exhaustiveness = kwargs.get('exhaustiveness', config.get('exhaustiveness', 8))
+    top_n = kwargs.get('top_n', config.get('top_n', 10))
+
+    try:
+        vina_out = prepare_and_run_vina(protein, ligand, output_dir, exhaustiveness=exhaustiveness)
+        parse_vina_poses(
+            pdbqt_file=vina_out,
+            out_dir=output_dir,
+            top_n=top_n,
+            prefix=prefix,
+            remove_hs=True,
+        )
+        print(f"[INFO] Vina docking complete. Results in {output_dir}")
+    except Exception as e:
+        print(f"[ERROR] Vina docking failed: {e}")
+        raise
+    return output_dir
 
 
 def parse_config_file_with_omegaconf(config_path):
@@ -542,41 +493,5 @@ def parse_config_file_with_omegaconf(config_path):
 
 
 if __name__ == "__main__":
-    # Usage:
-    #   python vina_posebusters.py /path/to/posebusters_dataset 10
-    import yaml
     config = parse_config_file_with_omegaconf(sys.argv[1])
-    run(config)
-    # exit()
-
-    # if len(sys.argv) >= 4:
-    #     main(posebusters_dir=sys.argv[1], results_dir=sys.argv[2], method=sys.argv[3], top_n=int(sys.argv[4]))
-    # if len(sys.argv) >= 3:
-    #     main(posebusters_dir=sys.argv[1], top_n=int(sys.argv[2]))
-    # elif len(sys.argv) == 2:
-    #     main(posebusters_dir=sys.argv[1])
-    base_dir = config['output_dir']
-    base_dir = "forks/GNINA/inference/gnina_runsNposes_output_0"
-    for protein_dir in os.listdir(base_dir):
-        print(f"processing protein {protein_dir}")
-        output_directory = os.path.join(base_dir, protein_dir)
-        sdf_file_path = os.path.join(output_directory, "docked.sdf.gz")
-        if not os.path.exists(sdf_file_path):
-            print(f"{protein_dir} does not exist")
-            continue
-        # Create the output directory if it doesn't exist
-        os.makedirs(output_directory, exist_ok=True)
-
-        # Decompress the SDF file
-        if not os.path.exists(sdf_file_path.replace("docked.sdf.gz", "docked.sdf")):
-            decompressed_file_path = decompress_file(sdf_file_path)
-
-        # Load the compressed SDF file using RDKit
-        mols = load_sdf(sdf_file_path.replace("docked.sdf.gz", "docked.sdf"))
-
-        # Extract scores from the loaded molecules
-        results = extract_scores(mols)
-
-        # Rank the poses and save to a single SDF file
-        rank_and_save_poses(results, output_directory)
-
+    run_dataset(config)

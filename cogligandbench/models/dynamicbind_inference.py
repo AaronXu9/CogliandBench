@@ -15,8 +15,8 @@ from omegaconf import DictConfig
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
-from posebench import register_custom_omegaconf_resolvers
-from posebench.utils.utils import find_ligand_files, find_protein_files
+from cogligandbench import register_custom_omegaconf_resolvers
+from cogligandbench.utils.utils import find_ligand_files, find_protein_files
 
 logging.basicConfig(format="[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -166,6 +166,169 @@ def main(cfg: DictConfig):
         )
 
 
+# ---------------------------------------------------------------------------
+# Public API (OmegaConf-based, no Hydra required)
+# ---------------------------------------------------------------------------
+
+def _run_dynamicbind_subprocess(
+    protein_filepath,
+    ligand_filepath,
+    header: str,
+    config: dict,
+    cache_path: str,
+):
+    """Run DynamicBind subprocess for a single protein-ligand pair."""
+    subprocess.run(
+        [
+            config["python_exec_path"],
+            os.path.join(config["dynamicbind_exec_dir"], "run_single_protein_inference.py"),
+            str(protein_filepath),
+            str(ligand_filepath),
+            "--samples_per_complex", str(config.get("samples_per_complex", 40)),
+            "--savings_per_complex", str(config.get("savings_per_complex", 1)),
+            "--inference_steps", str(config.get("inference_steps", 20)),
+            "--batch_size", str(config.get("batch_size", 5)),
+            "--cache_path", cache_path,
+            "--header", header,
+            "--device", str(config.get("cuda_device_index", 0)),
+            "--python", config["python_exec_path"],
+            "--relax_python", config["python_exec_path"],
+            "--results", str(os.path.join(config["dynamicbind_exec_dir"], "inference", "outputs", "results")),
+            "--no_relax",
+            "--paper",
+        ],
+        check=True,
+    )  # nosec
+
+
+def run_dataset(config: dict):
+    """Run DynamicBind over a benchmark dataset via a standard inputs CSV.
+
+    The CSV must have columns: complex_name, protein_path, ligand_path (SDF).
+    SMILES is extracted from each SDF and passed to DynamicBind as a temp CSV.
+    """
+    import uuid
+    import tempfile
+    from omegaconf import OmegaConf
+    from rdkit import Chem
+    import pandas as pd
+    import time
+    from cogligandbench.utils.log import get_custom_logger
+
+    os.environ["MKL_THREADING_LAYER"] = "GNU"
+    logger = get_custom_logger("dynamicbind", config, f"dynamicbind_timing_{config['repeat_index']}.log")
+    inputs_df = pd.read_csv(config["inputs_csv"])
+
+    for _, row in inputs_df.iterrows():
+        system_id = row["complex_name"]
+        protein_pdb = row["protein_path"]
+        ligand_sdf = row["ligand_path"]
+
+        if not (os.path.exists(protein_pdb) and os.path.exists(ligand_sdf)):
+            logger.warning(f"Missing files for {system_id}. Skipping.")
+            continue
+
+        out_dir = os.path.join(config["output_dir"], system_id)
+        if config.get("skip_existing", False) and os.path.exists(out_dir):
+            existing = glob.glob(os.path.join(out_dir, "**", "rank1_ligand*.sdf"), recursive=True)
+            if existing:
+                logger.info(f"Skipping {system_id} — already done.")
+                continue
+
+        # Extract SMILES and write temp ligand CSV for DynamicBind
+        mol = next(Chem.SDMolSupplier(ligand_sdf, removeHs=True), None)
+        if mol is None:
+            logger.error(f"Cannot read ligand for {system_id}. Skipping.")
+            continue
+        smiles = Chem.MolToSmiles(mol)
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as tf:
+            tf.write(f"ligand\n{smiles}\n")
+            ligand_csv = tf.name
+
+        cache_path = config.get("cache_path", "/tmp/dynamicbind_cache")
+        unique_cache = f"{cache_path}_{system_id}_{uuid.uuid4()}"
+        header = f"{config.get('benchmark', 'dataset')}_{system_id}_{config['repeat_index']}"
+
+        start = time.time()
+        try:
+            _run_dynamicbind_subprocess(protein_pdb, ligand_csv, header, config, unique_cache)
+
+            # Copy results to canonical output dir
+            results_glob = glob.glob(
+                os.path.join(config["dynamicbind_exec_dir"], "inference", "outputs", "results",
+                             header, "index0_idx_0", "rank*.sdf")
+            )
+            os.makedirs(out_dir, exist_ok=True)
+            for f in results_glob:
+                import shutil
+                shutil.copy(f, out_dir)
+
+            logger.info(f"{system_id},{time.time() - start:.2f}")
+        except Exception as e:
+            logger.error(f"DynamicBind failed for {system_id}: {e}")
+        finally:
+            os.unlink(ligand_csv)
+
+
+def run_single(
+    protein: str,
+    ligand: str,
+    output_dir: str,
+    config: dict = None,
+    prefix: str = None,
+    **kwargs,
+) -> str:
+    """Run DynamicBind on a single protein (PDB) + ligand (SDF) pair.
+
+    SMILES is extracted from the SDF. Outputs (rank*.sdf) are copied to output_dir.
+    """
+    import uuid
+    import tempfile
+    import shutil
+    from rdkit import Chem
+
+    config = config or {}
+    prefix = prefix or os.path.splitext(os.path.basename(protein))[0]
+    os.makedirs(output_dir, exist_ok=True)
+    os.environ["MKL_THREADING_LAYER"] = "GNU"
+
+    mol = next(Chem.SDMolSupplier(ligand, removeHs=True), None)
+    if mol is None:
+        raise ValueError(f"Cannot read molecule from {ligand}")
+    smiles = Chem.MolToSmiles(mol)
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as tf:
+        tf.write(f"ligand\n{smiles}\n")
+        ligand_csv = tf.name
+
+    cache_path = config.get("cache_path", "/tmp/dynamicbind_cache")
+    unique_cache = f"{cache_path}_{prefix}_{uuid.uuid4()}"
+    header = f"single_{prefix}_{config.get('repeat_index', 0)}"
+
+    try:
+        _run_dynamicbind_subprocess(protein, ligand_csv, header, config, unique_cache)
+
+        results_glob = glob.glob(
+            os.path.join(config.get("dynamicbind_exec_dir", "forks/DynamicBind"),
+                         "inference", "outputs", "results", header, "index0_idx_0", "rank*.sdf")
+        )
+        for f in results_glob:
+            shutil.copy(f, output_dir)
+
+        print(f"[INFO] DynamicBind docking complete. Results in {output_dir}")
+    except Exception as e:
+        print(f"[ERROR] DynamicBind docking failed: {e}")
+        raise
+    finally:
+        os.unlink(ligand_csv)
+
+    return output_dir
+
+
 if __name__ == "__main__":
-    register_custom_omegaconf_resolvers()
-    main()
+    from omegaconf import OmegaConf
+    import sys
+    os.environ.setdefault("PROJECT_ROOT", str(Path(__file__).resolve().parents[2]))
+    cfg = OmegaConf.to_container(OmegaConf.load(sys.argv[1]), resolve=True)
+    run_dataset(cfg)
