@@ -352,8 +352,8 @@ class ICMBatchDocking:
             shortened_protein_name = self.get_shortened_protein_name(protein_name)
             
             if self.config.skip_existing and (
-                os.path.exists(os.path.join(self.config.icb_out_dir, protein_name, f"answers_{protein_name}.sdf")
-                               or os.path.exits(os.path.join(self.config.icb_out_dir, protein_name, f"rank1.sdf")))):
+                os.path.exists(os.path.join(self.config.icb_out_dir, protein_name, f"answers_{protein_name}.sdf"))
+                               or os.path.exists(os.path.join(self.config.icb_out_dir, protein_name, f"rank1.sdf"))):
                  
                 print(f"Skipping existing script for {pair['ligand_name']}.")
                 continue
@@ -423,9 +423,9 @@ class ICMBatchDocking:
                 print(f"Skipping existing script for {pair['ligand_name']}.")
                 continue
             if self.config.skip_existing and (
-                os.path.exists(os.path.join(self.config.icb_out_dir, protein_name, f"answers_{protein_name}.sdf")
-                               or os.path.exits(os.path.join(self.config.icb_out_dir, protein_name, f"rank1.sdf")))):
-                 
+                os.path.exists(os.path.join(self.config.icb_out_dir, protein_name, f"answers_{protein_name}.sdf"))
+                               or os.path.exists(os.path.join(self.config.icb_out_dir, protein_name, f"rank1.sdf"))):
+
                 print(f"Skipping existing script for {pair['ligand_name']}.")
                 continue
             os.makedirs(work_dir, exist_ok=True)

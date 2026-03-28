@@ -253,10 +253,11 @@ def main():
     # --- Configuration ---
     
     # 1. Path to the reference data (where each system has its own folder)
-    reference_data_root = "/home/aoxu/projects/PoseBench/data/plinder_set/"
-    
+    # reference_data_root = "/home/aoxu/projects/PoseBench/data/plinder_set/"
+    reference_data_root = "/home/aoxu/projects/PoseBench/data/runsNposes"
+     
     # 2. ROOT path for all your prediction folders
-    predictions_root = "/home/aoxu/projects/PoseBench/forks/boltz/inference/plinder_set_0/"
+    predictions_root = "/home/aoxu/projects/PoseBench/forks/boltz/inference/runsNposes_0/"
     
     # 3. Path to your ICM script template
    # Get the directory where this Python script is located.
@@ -266,7 +267,7 @@ def main():
     icm_script_path = os.path.join(script_dir, "calculate_rmsd.icm")
 
     # 4. Where to save the final results
-    output_csv_path = "icm_rmsd_results.csv"
+    output_csv_path = "icm_runsNpose_rmsd_results.csv"
     ligand_names = {}  # Dictionary to collect ligand names by system
     results = []  # List to collect results for later writing
 
@@ -402,10 +403,12 @@ def main_supplement():
     # --- Configuration ---
     
     # 1. Path to the reference data (where each system has its own folder)
-    reference_data_root = "/home/aoxu/projects/PoseBench/data/plinder_set/"
+    # reference_data_root = "/home/aoxu/projects/PoseBench/data/plinder_set/"
+    reference_data_root = "/home/aoxu/projects/PoseBench/data/runsNposes"
     
     # 2. ROOT path for all your prediction folders
-    predictions_root = "/home/aoxu/projects/PoseBench/forks/boltz/inference/plinder_set_0/"
+    # predictions_root = "/home/aoxu/projects/PoseBench/forks/boltz/inference/plinder_set_0/"
+    predictions_root = "/home/aoxu/projects/PoseBench/forks/boltz/inference/runsNposes_0/"
     
     # 3. Path to your ICM script template
    # Get the directory where this Python script is located.
@@ -415,9 +418,9 @@ def main_supplement():
     icm_script_path = os.path.join(script_dir, "calculate_rmsd.icm")
 
     # 4. Where to save the final results
-    output_csv_path = os.path.join(root_dir, "icm_rmsd_results_supplement.csv")
+    output_csv_path = os.path.join(root_dir, "icm_runsNposes_rmsd_results.csv")
     results = []  # List to collect results for later writing
-    rmsd_df = pd.read_csv(f"{root_dir}/icm_rmsd_results.csv", index_col=0)
+    # rmsd_df = pd.read_csv(f"{root_dir}/icm_runsNposes_rmsd_results_supplement.csv", index_col=0)
 
     # --- Find all unique systems to process using the reference ligands as anchors ---
     ligand_files = glob.glob(os.path.join(reference_data_root, "*/*_ligand.sdf"), recursive=True)
@@ -555,6 +558,6 @@ def merge():
     print("Combined results saved to icm_rmsd_combined_results.csv")
 
 if __name__ == "__main__":
-    # main()
+    main()
     # main_supplement()
-    merge()
+    # merge()

@@ -12,7 +12,7 @@ from omegaconf import DictConfig, open_dict
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
-from posebench.utils.data_utils import (
+from cogligandbench.utils.data_utils import (
     extract_protein_and_ligands_with_prody,
     parse_inference_inputs_from_dir,
 )

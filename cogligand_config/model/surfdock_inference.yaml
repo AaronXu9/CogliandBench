@@ -4,15 +4,15 @@ repeat_index: 0
 # Path to the SurfDock installation (needs extracted tools + editable ESM install)
 # NOTE: tools/MSMS/APBS and ESM library are not in the git submodule; point to the
 # local installation that has them. Model weights are served from forks/SurfDock.
-surfdock_dir: /home/aoxu/projects/SurfDock
+surfdock_dir: ${oc.env:SURFDOCK_DIR}  # set to your local SurfDock installation (needs extracted tools + editable ESM)
 # Precomputed SO3/torus arrays required at import time by SurfDock internals
-precomputed_arrays: /home/aoxu/projects/precomputed/precomputed_arrays
+precomputed_arrays: ${oc.env:SURFDOCK_PRECOMPUTED_ARRAYS}
 surfdock_env: SurfDock  # conda env name
 
 # Pre-computed data for runsNposes (Steps 1-3 already done)
-inputs_csv: /home/aoxu/projects/SurfDock/data/runsNposes_benchmark/input_csv_files/surfdock_runsNposes_benchmark_inputs.csv
-esm_embeddings_path: /home/aoxu/projects/SurfDock/data/runsNposes_benchmark/runsNposes_benchmark_esmbedding/esm_embedding_pocket_output_for_train/esm2_3billion_pdbbind_embeddings.pt
-surface_dir: /home/aoxu/projects/SurfDock/data/runsNposes_benchmark/8A_surface
+inputs_csv: ${oc.env:SURFDOCK_INPUTS_CSV,null}        # dataset mode only: pre-built input CSV
+esm_embeddings_path: ${oc.env:SURFDOCK_ESM_EMBEDDINGS,null}  # dataset mode only: pre-computed .pt
+surface_dir: ${oc.env:SURFDOCK_SURFACE_DIR,null}    # dataset mode only: pre-computed 8A surfaces
 
 # Model weights
 diffusion_model_dir: ${oc.env:PROJECT_ROOT}/forks/SurfDock/model_weights/docking

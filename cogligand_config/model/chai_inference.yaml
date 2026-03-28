@@ -12,4 +12,4 @@ logging:
   level: "INFO"
   file: "chai-1_docking.log"
   console: true
-  log_dir: "/home/aoxu/projects/PoseBench/logs"
+  log_dir: ${oc.env:PROJECT_ROOT}/logs

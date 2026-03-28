@@ -1,7 +1,9 @@
 # Basic configuration
 # dataset: "plinder_set"
 dataset: "runsNposes"
-task: "preprocess"
+# task: "identify_pocket"
+# task: "dock"
+task: "rank_results"
 # data_dir: "/home/aoxu/projects/PoseBench/data/plinder_set"
 data_dir: "/home/aoxu/projects/PoseBench/data/runsNposes/"
 icm_preprocess_script_template: "./forks/ICM/icm_docking_scripts_template/icm_load_and_preprocessing_template.icm"
@@ -17,6 +19,7 @@ icm_map_dir: "/home/aoxu/projects/PoseBench/forks/ICM/ICM_manual_docking_maps/ru
 # subset_dir: "/home/aoxu/projects/DrugDiscovery/PoseBench/forks/DiffDock/inference/diffdock_posebusters_benchmark_output_orig_structure_1/"
 docking_maps: "manual"
 icm_dockscan_path: "/home/aoxu/icm-3.9-4/_dockScan"
+icm_home: "/home/aoxu/icm-3.9-4"
 repeat_index: 0
 # icb_out_dir: "/home/aoxu/projects/PoseBench/forks/ICM/inference/plinder_set"
 icb_out_dir: "/home/aoxu/projects/PoseBench/forks/ICM/inference/runsNposes"

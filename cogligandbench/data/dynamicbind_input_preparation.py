@@ -15,8 +15,8 @@ from omegaconf import DictConfig, open_dict
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
-from posebench import register_custom_omegaconf_resolvers
-from posebench.utils.data_utils import parse_inference_inputs_from_dir
+from cogligandbench import register_custom_omegaconf_resolvers
+from cogligandbench.utils.data_utils import parse_inference_inputs_from_dir
 
 logging.basicConfig(format="[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)

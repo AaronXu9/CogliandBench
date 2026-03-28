@@ -1,7 +1,7 @@
 import os
 import re
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 import pandas as pd
 from rdkit import Chem
 from posebusters.posebusters import PoseBusters
@@ -59,6 +59,39 @@ class ICMApproach(DockingApproach):
         for mol in suppl:
             if mol is not None and "Score" in mol.GetPropNames():
                 return float(mol.GetProp("Score"))
+        return float('nan')
+
+class ICMRTCNNApproach(DockingApproach):
+    def get_name(self) -> str:
+        return "icm_rtcnn"
+
+    def list_top_n_files(self, protein_dir: str, top_n: int) -> List[str]:
+        """
+        Assume ICM wrote 'rank1.sdf', 'rank2.sdf', etc.
+        We'll list all files matching 'rankX.sdf', sort by X, return top_n.
+        """
+        all_files = os.listdir(protein_dir)
+        sdf_files = [f for f in all_files if f.startswith("RTCNN_rank") and f.endswith(".sdf")]
+        
+        def extract_rank(fname: str) -> int:
+            # "rank(\d+).sdf"
+            match = re.match(r"RTCNN_rank(\d+)\.sdf", fname)
+            if match:
+                return int(match.group(1))
+            return 999999
+        
+        sdf_files.sort(key=extract_rank)
+        return [os.path.join(protein_dir, f) for f in sdf_files[:top_n]]
+
+    def parse_score(self, sdf_path: str) -> float:
+        """
+        ICM stores the docking score in the SDF property 'Score'.
+        We'll read the single pose from the file and extract that property.
+        """
+        suppl = Chem.SDMolSupplier(sdf_path, removeHs=False)
+        for mol in suppl:
+            if mol is not None and "RTCNN" in mol.GetPropNames():
+                return float(mol.GetProp("RTCNN"))
         return float('nan')
 
 class DiffDockApproach(DockingApproach):
@@ -154,7 +187,6 @@ class DiffDockPocketApproach(DockingApproach):
                 return float('nan')
         return float('nan')
     
-
 class ChaiApproach(DockingApproach):
     def get_name(self) -> str:
         return "chai-1"
@@ -184,7 +216,6 @@ class ChaiApproach(DockingApproach):
     def parse_score(self, sdf_path: str) -> float:
         return float('nan')
     
-
 class VinaApproach(DockingApproach):
     def get_name(self) -> str:
         return "vina"
@@ -223,7 +254,6 @@ class VinaApproach(DockingApproach):
                 return float('nan')
         return float('nan')
     
-
 class GninaApproach(DockingApproach):
     def get_name(self) -> str:
         return "gnina"
@@ -261,7 +291,6 @@ class GninaApproach(DockingApproach):
                 return float('nan')
         return float('nan')
     
-
 class SurfDockApproach(DockingApproach):
     def get_name(self) -> str:
         return "surfdock"
@@ -326,8 +355,7 @@ class SurfDockApproach(DockingApproach):
         print(f"Parsed from {fname}: RMSD={rmsd}, confidence={confidence}")
         # Return confidence as the 'score' for consistency
         return confidence
-
-
+ 
 class BoltzApproach(DockingApproach):
     """BoltzApproach for molecular structure prediction with robust extraction and alignment"""
     
@@ -728,3 +756,38 @@ class BoltzApproach(DockingApproach):
             print(f"[ERROR] Failed to parse score from {sdf_path}: {str(e)}")
             return float('nan')
 
+class UniDock2Approach(DockingApproach):
+    def get_name(self) -> str:
+        return "unidock2"
+
+    def list_top_n_files(self, protein_dir: str, top_n: int) -> List[str]:
+        """
+        Uni-Dock2 outputs are named like '5SAK_ZRY_pose3_score-7.97.sdf'
+        We'll parse 'pose(\d+)' to get the rank, sort, and return top_n.
+        """
+        all_files = os.listdir(protein_dir)
+        sdf_files = [f for f in all_files if '_pose' in f and f.endswith('.sdf')]
+
+        def extract_rank_num(fname: str) -> int:
+            match = re.search(r'rank(\d+)', fname)
+            if match:
+                return int(match.group(1))
+            return 999999
+
+        sdf_files.sort(key=extract_rank_num)
+        return [os.path.join(protein_dir, f) for f in sdf_files[:top_n]]
+
+
+    def parse_score(self, sdf_path: str, metric: Optional[str] = "vina_binding_free_energy") -> float:
+        """
+        get score from sdf file
+        """
+        try:
+            with open(sdf_path, 'r') as f:
+                content = f.read()
+                match = re.search(r'<{}>\s*\(\d+\)\s*\n([-\d.]+)'.format(metric), content)
+                if match:
+                    return float(match.group(1))
+        except Exception as e:
+            print(f"[ERROR] Failed to parse score from {sdf_path}: {str(e)}")
+        return float('nan')

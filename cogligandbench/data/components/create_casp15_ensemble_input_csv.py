@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
-from posebench.utils.data_utils import extract_sequences_from_protein_structure_file
+from cogligandbench.utils.data_utils import extract_sequences_from_protein_structure_file
 
 
 def create_casp15_ensemble_input_csv(args: argparse.Namespace):
