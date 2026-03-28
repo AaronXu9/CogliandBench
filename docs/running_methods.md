@@ -9,9 +9,9 @@ All methods operate on **crystal structures** via the `cogligandbench` package. 
 Most methods follow the same invocation pattern:
 
 ```bash
-export PROJECT_ROOT=/path/to/PoseBench
+export PROJECT_ROOT=/path/to/CogLigandBench
 
-# Hydra-based methods (chai, dynamicbind, rfaa, diffdock, fabind, neuralplexer):
+# Hydra-based methods (chai, dynamicbind):
 python3 cogligandbench/models/<method>_inference.py [key=value overrides]
 
 # Config-file-based methods (vina, gnina, ICM):
@@ -76,12 +76,12 @@ Key config fields:
 ```yaml
 dataset: runsNposes
 task: dock          # or: identify_pocket, rank_results
-data_dir: /home/aoxu/projects/PoseBench/data/runsNposes/
+data_dir: /path/to/CogLigandBench/data/runsNposes/
 icm_executable: /home/aoxu/icm-3.9-4/icm64
 icm_dockscan_path: /home/aoxu/icm-3.9-4/_dockScan
-icm_docking_dir: /path/to/PoseBench/forks/ICM
-icm_map_dir: /path/to/PoseBench/forks/ICM/ICM_manual_docking_maps/runsNposes
-icb_out_dir: /path/to/PoseBench/forks/ICM/inference/runsNposes
+icm_docking_dir: /path/to/CogLigandBench/forks/ICM
+icm_map_dir: /path/to/CogLigandBench/forks/ICM/ICM_manual_docking_maps/runsNposes
+icb_out_dir: /path/to/CogLigandBench/forks/ICM/inference/runsNposes
 docking_maps: manual
 docking_params:
   num_conf: 10
@@ -104,12 +104,12 @@ Platform paths are auto-detected (Darwin vs Linux) via `platform_configs` in the
 ```bash
 python3 cogligandbench/models/chai_inference.py
 # or with overrides:
-python3 cogligandbench/models/chai_inference.py dataset=plinder repeat_index=0
+python3 cogligandbench/models/chai_inference.py dataset=runsNposes repeat_index=0
 ```
 
 Key config fields:
 ```yaml
-dataset: plinder
+dataset: runsNposes
 input_dir: ${oc.env:PROJECT_ROOT}/forks/chai-lab/prediction_inputs/${dataset}
 output_dir: ${oc.env:PROJECT_ROOT}/forks/chai-lab/prediction_outputs/${dataset}_${repeat_index}
 cuda_device_index: 0
@@ -125,60 +125,34 @@ Inputs are per-complex directories under `input_dir/`, each containing a `.fasta
 ## DynamicBind
 
 **Script:** `cogligandbench/models/dynamicbind_inference.py`
-**Config:** `configs/model/dynamicbind_inference.yaml` (uses upstream posebench config)
+**Config:** `cogligand_config/model/dynamicbind_inference.yaml`
 
 ```bash
-python3 cogligandbench/models/dynamicbind_inference.py dataset=posebusters_benchmark repeat_index=1
+python3 cogligandbench/models/dynamicbind_inference.py dataset=runsNposes repeat_index=0
 ```
 
 Reads protein files from `input_data_dir` and ligand CSV files from `input_ligand_csv_dir`. Pairs proteins and ligands by matching filename stems. Runs DynamicBind via subprocess from `forks/DynamicBind/`.
 
 ---
 
-## DiffDock
+## SurfDock
 
-**Script:** `cogligandbench/models/diffdock_inference.py`
-**Config:** `configs/model/diffdock_inference.yaml` (uses upstream posebench config)
+**Script:** `cogligandbench/models/surfdock_inference.py`
+**Config:** `cogligand_config/model/surfdock_inference.yaml`
+
+SurfDock requires a local installation with MSMS/APBS/pdb2pqr binaries. Set the required env vars before running:
 
 ```bash
-python3 cogligandbench/models/diffdock_inference.py dataset=posebusters_benchmark repeat_index=1
+export SURFDOCK_DIR=/path/to/your/SurfDock/installation
+export SURFDOCK_PRECOMPUTED_ARRAYS=/path/to/precomputed/precomputed_arrays
 ```
 
-Reads from `input_csv_path` (columns: protein path, ligand SMILES). Supports `v1_baseline` and `pocket_only_baseline` flags. Runs DiffDock via subprocess from `forks/DiffDock/`.
-
----
-
-## FABind
-
-**Script:** `cogligandbench/models/fabind_inference.py`
-**Config:** `configs/model/fabind_inference.yaml`
+For dataset mode, pre-computed inputs are required:
 
 ```bash
-python3 cogligandbench/models/fabind_inference.py dataset=posebusters_benchmark repeat_index=1
-```
-
----
-
-## NeuralPLexer
-
-**Script:** `cogligandbench/models/neuralplexer_inference.py`
-**Config:** `configs/model/neuralplexer_inference.yaml`
-
-```bash
-python3 cogligandbench/models/neuralplexer_inference.py dataset=posebusters_benchmark repeat_index=1
-```
-
-Supports `no_ilcl` flag to use the rigid docking (`pdbbind_finetuned`) checkpoint instead of the default.
-
----
-
-## RoseTTAFold-All-Atom (RFAA)
-
-**Script:** `cogligandbench/models/rfaa_inference.py`
-**Config:** `configs/model/rfaa_inference.yaml`
-
-```bash
-python3 cogligandbench/models/rfaa_inference.py dataset=posebusters_benchmark repeat_index=1
+export SURFDOCK_INPUTS_CSV=/path/to/surfdock_runsNposes_benchmark_inputs.csv
+export SURFDOCK_ESM_EMBEDDINGS=/path/to/esm2_3billion_pdbbind_embeddings.pt
+export SURFDOCK_SURFACE_DIR=/path/to/8A_surface
 ```
 
 ---
@@ -190,4 +164,3 @@ python3 cogligandbench/models/rfaa_inference.py dataset=posebusters_benchmark re
 - **Input directory format** (ICM): `<data_dir>/<complex_name>/<complex_name>.pdb` + `*.sdf`
 - **Output poses** are written as ranked SDF files: `<complex_name>_pose<rank>_score<score>.sdf`
 - **Timing logs** record `complex_name,elapsed_seconds` per entry
-- **FlowDock and AlphaFold 3** do not yet have cogligandbench inference scripts; use their respective `forks/` directories directly
