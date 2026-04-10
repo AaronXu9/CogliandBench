@@ -13,38 +13,14 @@ import rootutils
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 from cogligandbench.utils.log import get_custom_logger
+from cogligandbench.utils.sequence import AA_3TO1, extract_protein_sequence as _extract_protein_sequence
 
 PROJECT_ROOT = os.environ.get("PROJECT_ROOT", str(rootutils.find_root(search_from=__file__, indicator=".project-root")))
-
-AA_3TO1 = {
-    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C",
-    "GLN": "Q", "GLU": "E", "GLY": "G", "HIS": "H", "ILE": "I",
-    "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F", "PRO": "P",
-    "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
-    "HSD": "H", "HSE": "H", "HSP": "H", "HIE": "H", "HID": "H",
-    "MSE": "M", "SEC": "U",
-}
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _extract_protein_sequence(pdb_path: str) -> list:
-    """Return a list of chain sequences from a PDB file."""
-    from biopandas.pdb import PandasPdb
-    ppdb = PandasPdb().read_pdb(pdb_path)
-    atoms = ppdb.df["ATOM"]
-    ca = atoms[atoms["atom_name"] == "CA"].drop_duplicates(
-        subset=["chain_id", "residue_number", "insertion"]
-    )
-    sequences = []
-    for chain_id, group in ca.groupby("chain_id", sort=False):
-        seq = "".join(AA_3TO1.get(r, "X") for r in group["residue_name"])
-        if seq:
-            sequences.append(seq)
-    return sequences
-
 
 def _get_smiles_from_sdf(sdf_path: str) -> str:
     mol = next(Chem.SDMolSupplier(sdf_path, removeHs=True), None)
