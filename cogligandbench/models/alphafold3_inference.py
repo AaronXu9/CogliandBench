@@ -11,7 +11,8 @@ Public surface (used by cogligandbench.engine):
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from pathlib import Path
+from typing import Dict, List, Optional, Union
 
 
 def _smiles_from_sdf(sdf_path: str) -> str:
@@ -65,14 +66,22 @@ def _build_af3_input_json(system_id: str, pdb_path: str, sdf_path: str) -> Dict:
     }
 
 
-def _extract_ligand_from_cif(cif_path, template_mol):
+def _extract_ligand_from_cif(
+    cif_path: str | Path,
+    template_mol: "Chem.Mol",
+) -> "Chem.Mol":
     """Pull the ligand (chain L) out of an AF3 mmCIF and recover bond orders.
 
     Strategy: parse the mmCIF with Biopython's MMCIF2Dict (a simple tokenizer
-    that works with any minimal mmCIF loop), collect HETATM records on chain
-    "L" into a synthetic PDB block, parse that block with RDKit (which infers
-    connectivity from distances), then call AssignBondOrdersFromTemplate with
-    the known SMILES template to recover the correct bond orders.
+    that works with any minimal mmCIF loop), collect all atoms on chain L (the
+    AF3 ligand chain) into a synthetic PDB block, parse that block with RDKit
+    (which infers connectivity from distances), then call
+    AssignBondOrdersFromTemplate with the known SMILES template to recover the
+    correct bond orders.
+
+    AF3 may label ligand atoms as either ATOM or HETATM depending on the
+    upstream version; all atoms on chain L are collected regardless of the
+    group_PDB label.
     """
     from Bio.PDB.MMCIF2Dict import MMCIF2Dict
     from rdkit import Chem
@@ -81,7 +90,6 @@ def _extract_ligand_from_cif(cif_path, template_mol):
     mmcif_dict = MMCIF2Dict(str(cif_path))
 
     # Extract per-atom arrays; chain id may live in auth_asym_id or label_asym_id
-    group_list = mmcif_dict.get("_atom_site.group_PDB", [])
     chain_list = mmcif_dict.get(
         "_atom_site.auth_asym_id",
         mmcif_dict.get("_atom_site.label_asym_id", []),
@@ -93,9 +101,15 @@ def _extract_ligand_from_cif(cif_path, template_mol):
     y_list = mmcif_dict.get("_atom_site.Cartn_y", [])
     z_list = mmcif_dict.get("_atom_site.Cartn_z", [])
 
+    n_atoms = len(x_list)
+    if len(y_list) != n_atoms or len(z_list) != n_atoms or len(chain_list) != n_atoms:
+        raise ValueError(
+            f"Malformed mmCIF {cif_path}: _atom_site columns have inconsistent lengths "
+            f"(x={len(x_list)}, y={len(y_list)}, z={len(z_list)}, chain={len(chain_list)})"
+        )
+
     pdb_lines = []
     atom_idx = 1
-    n_atoms = len(x_list)
     for i in range(n_atoms):
         if chain_list[i] != "L":
             continue
@@ -113,7 +127,7 @@ def _extract_ligand_from_cif(cif_path, template_mol):
         atom_idx += 1
 
     if not pdb_lines:
-        raise ValueError(f"No ligand atoms (chain L HETATM) found in {cif_path}")
+        raise ValueError(f"No ligand atoms (chain L) found in {cif_path}")
 
     pdb_block = "\n".join(pdb_lines) + "\nEND\n"
     raw_mol = Chem.MolFromPDBBlock(pdb_block, removeHs=False, sanitize=False)
