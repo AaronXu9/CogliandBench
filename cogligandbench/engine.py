@@ -91,7 +91,7 @@ def dock_engine(
     """Run docking with the specified method.
 
     Args:
-        method:     Docking method. One of: vina, gnina, chai, dynamicbind, unidock2.
+        method:     Docking method. One of: vina, gnina, chai, dynamicbind, unidock2, surfdock, alphafold3.
         dataset:    Dataset name for batch mode (e.g. 'runsNposes'). Exclusive with protein/ligand.
         protein:    Path to receptor PDB for single-molecule mode.
         ligand:     Path to ligand SDF for single-molecule mode.
