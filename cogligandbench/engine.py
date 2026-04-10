@@ -11,17 +11,18 @@ Usage from a notebook or script:
     dock_engine('chai',  dataset='runsNposes', cuda_device_index=1)
 
     # Single-molecule mode — dock one protein-ligand pair
-    dock_engine('vina',      protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
-    dock_engine('gnina',     protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
-    dock_engine('chai',      protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
+    dock_engine('vina',        protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
+    dock_engine('gnina',       protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
+    dock_engine('chai',        protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
     dock_engine('dynamicbind', protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
-    dock_engine('unidock2',  protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
-    dock_engine('surfdock',  protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
+    dock_engine('unidock2',    protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
+    dock_engine('surfdock',    protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
+    dock_engine('alphafold3',  protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
 
     # Pass any config override as a kwarg:
     dock_engine('vina', dataset='runsNposes', top_n=5, exhaustiveness=16)
 
-Available methods: vina, gnina, chai, dynamicbind, unidock2, surfdock
+Available methods: vina, gnina, chai, dynamicbind, unidock2, surfdock, alphafold3
 """
 
 import importlib
@@ -33,7 +34,7 @@ from omegaconf import OmegaConf
 
 _PROJECT_ROOT = str(rootutils.find_root(search_from=__file__, indicator=".project-root"))
 
-SUPPORTED_METHODS = ("vina", "gnina", "chai", "dynamicbind", "unidock2", "surfdock")
+SUPPORTED_METHODS = ("vina", "gnina", "chai", "dynamicbind", "unidock2", "surfdock", "alphafold3")
 
 _CONFIG_PATHS = {
     "vina":         os.path.join(_PROJECT_ROOT, "cogligand_config", "model", "vina_inference.yaml"),
@@ -42,6 +43,7 @@ _CONFIG_PATHS = {
     "dynamicbind":  os.path.join(_PROJECT_ROOT, "cogligand_config", "model", "dynamicbind_inference.yaml"),
     "unidock2":     os.path.join(_PROJECT_ROOT, "cogligand_config", "model", "unidock2_inference.yaml"),
     "surfdock":     os.path.join(_PROJECT_ROOT, "cogligand_config", "model", "surfdock_inference.yaml"),
+    "alphafold3":   os.path.join(_PROJECT_ROOT, "cogligand_config", "model", "alphafold3_inference.yaml"),
 }
 
 _METHOD_MODULES = {
@@ -51,6 +53,7 @@ _METHOD_MODULES = {
     "dynamicbind": "cogligandbench.models.dynamicbind_inference",
     "unidock2":    "cogligandbench.models.unidock2_inference",
     "surfdock":    "cogligandbench.models.surfdock_inference",
+    "alphafold3":  "cogligandbench.models.alphafold3_inference",
 }
 
 
