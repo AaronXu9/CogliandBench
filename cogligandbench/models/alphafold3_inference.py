@@ -12,7 +12,7 @@ Public surface (used by cogligandbench.engine):
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 
 
 def _smiles_from_sdf(sdf_path: str) -> str:
