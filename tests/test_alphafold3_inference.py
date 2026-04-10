@@ -91,9 +91,16 @@ class TestBuildAf3InputJson:
         assert decoded == d
 
 
-def _write_tiny_cif_from_sdf(sdf_path, cif_path, chain_id="L", resname="LIG"):
+def _write_tiny_cif_from_sdf(
+    sdf_path, cif_path, chain_id="L", resname="LIG", use_auth_asym_id=True
+):
     """Build a minimal mmCIF containing chain ``chain_id`` HETATM records
     with the heavy-atom coordinates from the first molecule in ``sdf_path``.
+
+    When ``use_auth_asym_id`` is True (default), the file includes BOTH
+    ``_atom_site.auth_asym_id`` and ``_atom_site.label_asym_id`` columns.
+    When False, only ``_atom_site.label_asym_id`` is written, exercising the
+    fallback code path in ``_extract_ligand_from_cif``.
     """
     from rdkit import Chem
 
@@ -111,8 +118,11 @@ def _write_tiny_cif_from_sdf(sdf_path, cif_path, chain_id="L", resname="LIG"):
         "_atom_site.label_comp_id",
         "_atom_site.label_asym_id",
         "_atom_site.label_seq_id",
-        "_atom_site.auth_asym_id",
-        "_atom_site.auth_seq_id",
+    ]
+    if use_auth_asym_id:
+        lines.append("_atom_site.auth_asym_id")
+        lines.append("_atom_site.auth_seq_id")
+    lines += [
         "_atom_site.Cartn_x",
         "_atom_site.Cartn_y",
         "_atom_site.Cartn_z",
@@ -124,11 +134,17 @@ def _write_tiny_cif_from_sdf(sdf_path, cif_path, chain_id="L", resname="LIG"):
         elem = atom.GetSymbol()
         # Atom name must be unique within the residue; use element + index
         atom_name = f"{elem}{i}"
-        lines.append(
-            f"HETATM {i} {elem} {atom_name} {resname} {chain_id} 1 "
-            f"{chain_id} 1 "
-            f"{pos.x:.3f} {pos.y:.3f} {pos.z:.3f} 1.00 0.00"
-        )
+        if use_auth_asym_id:
+            lines.append(
+                f"HETATM {i} {elem} {atom_name} {resname} {chain_id} 1 "
+                f"{chain_id} 1 "
+                f"{pos.x:.3f} {pos.y:.3f} {pos.z:.3f} 1.00 0.00"
+            )
+        else:
+            lines.append(
+                f"HETATM {i} {elem} {atom_name} {resname} {chain_id} 1 "
+                f"{pos.x:.3f} {pos.y:.3f} {pos.z:.3f} 1.00 0.00"
+            )
     cif_path.write_text("\n".join(lines) + "\n")
 
 
@@ -165,3 +181,19 @@ class TestExtractLigandFromCif:
         template = Chem.MolFromSmiles(_smiles_from_sdf(FIXTURE_LIGAND))
         with pytest.raises(ValueError, match="No ligand atoms"):
             _extract_ligand_from_cif(cif_path, template_mol=template)
+
+    def test_uses_label_asym_id_when_auth_asym_id_missing(self, tmp_path):
+        """Verify the fallback to label_asym_id when auth_asym_id column is absent."""
+        _require_fixture()
+        from rdkit import Chem
+        from cogligandbench.models.alphafold3_inference import (
+            _extract_ligand_from_cif, _smiles_from_sdf,
+        )
+
+        cif_path = tmp_path / "label_only.cif"
+        _write_tiny_cif_from_sdf(FIXTURE_LIGAND, cif_path, use_auth_asym_id=False)
+
+        template = Chem.MolFromSmiles(_smiles_from_sdf(FIXTURE_LIGAND))
+        mol = _extract_ligand_from_cif(cif_path, template_mol=template)
+        assert mol is not None
+        assert Chem.MolToSmiles(Chem.RemoveHs(mol)) == _smiles_from_sdf(FIXTURE_LIGAND)
