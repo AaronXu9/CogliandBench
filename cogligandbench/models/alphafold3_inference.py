@@ -11,7 +11,55 @@ Public surface (used by cogligandbench.engine):
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Dict, List, Optional
+
+
+def _smiles_from_sdf(sdf_path: str) -> str:
+    """Read the first molecule from an SDF and return its canonical SMILES."""
+    from rdkit import Chem
+
+    suppl = Chem.SDMolSupplier(sdf_path, removeHs=True)
+    mol = next(iter(suppl), None)
+    if mol is None:
+        raise ValueError(f"Cannot read molecule from {sdf_path}")
+    return Chem.MolToSmiles(mol)
+
+
+def _build_af3_input_json(system_id: str, pdb_path: str, sdf_path: str) -> Dict:
+    """Construct the AF3 input-JSON dict for a single protein + ligand pair.
+
+    Uses no-MSA mode: each protein chain's ``unpairedMsa`` field carries
+    only the query sequence as a single-row A3M, ``pairedMsa`` is empty,
+    and ``templates`` is the empty list.
+    """
+    from cogligandbench.utils.sequence import extract_protein_sequence
+
+    sequences = extract_protein_sequence(pdb_path)
+    if not sequences:
+        raise ValueError(f"No protein sequences found in {pdb_path}")
+
+    smiles = _smiles_from_sdf(sdf_path)
+
+    entries: List[Dict] = []
+    for i, seq in enumerate(sequences):
+        entries.append({
+            "protein": {
+                "id": chr(ord("A") + i),
+                "sequence": seq,
+                "unpairedMsa": f">query\n{seq}\n",
+                "pairedMsa": "",
+                "templates": [],
+            }
+        })
+    entries.append({"ligand": {"id": "L", "smiles": smiles}})
+
+    return {
+        "name": system_id,
+        "modelSeeds": [1234],
+        "sequences": entries,
+        "dialect": "alphafold3",
+        "version": 2,
+    }
 
 
 def run_single(
