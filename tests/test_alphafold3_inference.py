@@ -89,3 +89,79 @@ class TestBuildAf3InputJson:
         encoded = json.dumps(d)
         decoded = json.loads(encoded)
         assert decoded == d
+
+
+def _write_tiny_cif_from_sdf(sdf_path, cif_path, chain_id="L", resname="LIG"):
+    """Build a minimal mmCIF containing chain ``chain_id`` HETATM records
+    with the heavy-atom coordinates from the first molecule in ``sdf_path``.
+    """
+    from rdkit import Chem
+
+    mol = next(Chem.SDMolSupplier(str(sdf_path), removeHs=True), None)
+    assert mol is not None, f"Cannot read SDF: {sdf_path}"
+    conf = mol.GetConformer()
+
+    lines = [
+        "data_test",
+        "loop_",
+        "_atom_site.group_PDB",
+        "_atom_site.id",
+        "_atom_site.type_symbol",
+        "_atom_site.label_atom_id",
+        "_atom_site.label_comp_id",
+        "_atom_site.label_asym_id",
+        "_atom_site.label_seq_id",
+        "_atom_site.auth_asym_id",
+        "_atom_site.auth_seq_id",
+        "_atom_site.Cartn_x",
+        "_atom_site.Cartn_y",
+        "_atom_site.Cartn_z",
+        "_atom_site.occupancy",
+        "_atom_site.B_iso_or_equiv",
+    ]
+    for i, atom in enumerate(mol.GetAtoms(), start=1):
+        pos = conf.GetAtomPosition(atom.GetIdx())
+        elem = atom.GetSymbol()
+        # Atom name must be unique within the residue; use element + index
+        atom_name = f"{elem}{i}"
+        lines.append(
+            f"HETATM {i} {elem} {atom_name} {resname} {chain_id} 1 "
+            f"{chain_id} 1 "
+            f"{pos.x:.3f} {pos.y:.3f} {pos.z:.3f} 1.00 0.00"
+        )
+    cif_path.write_text("\n".join(lines) + "\n")
+
+
+class TestExtractLigandFromCif:
+    def test_recovers_canonical_smiles_from_synthetic_cif(self, tmp_path):
+        _require_fixture()
+        from rdkit import Chem
+        from cogligandbench.models.alphafold3_inference import (
+            _extract_ligand_from_cif, _smiles_from_sdf,
+        )
+
+        cif_path = tmp_path / "tiny.cif"
+        _write_tiny_cif_from_sdf(FIXTURE_LIGAND, cif_path)
+
+        template_smiles = _smiles_from_sdf(FIXTURE_LIGAND)
+        template = Chem.MolFromSmiles(template_smiles)
+
+        mol = _extract_ligand_from_cif(cif_path, template_mol=template)
+        assert mol is not None
+        # After bond-order recovery, the canonical SMILES should match
+        assert Chem.MolToSmiles(Chem.RemoveHs(mol)) == template_smiles
+
+    def test_raises_when_chain_l_missing(self, tmp_path):
+        _require_fixture()
+        from rdkit import Chem
+        from cogligandbench.models.alphafold3_inference import (
+            _extract_ligand_from_cif, _smiles_from_sdf,
+        )
+
+        # Write a CIF where the ligand is on chain "Z" instead of "L"
+        cif_path = tmp_path / "wrong_chain.cif"
+        _write_tiny_cif_from_sdf(FIXTURE_LIGAND, cif_path, chain_id="Z")
+
+        template = Chem.MolFromSmiles(_smiles_from_sdf(FIXTURE_LIGAND))
+        with pytest.raises(ValueError, match="No ligand atoms"):
+            _extract_ligand_from_cif(cif_path, template_mol=template)
