@@ -13,7 +13,7 @@ import rootutils
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 from cogligandbench.utils.log import get_custom_logger
-from cogligandbench.utils.sequence import AA_3TO1, extract_protein_sequence as _extract_protein_sequence
+from cogligandbench.utils.sequence import extract_protein_sequence as _extract_protein_sequence
 
 PROJECT_ROOT = os.environ.get("PROJECT_ROOT", str(rootutils.find_root(search_from=__file__, indicator=".project-root")))
 
