@@ -18,7 +18,10 @@ def _smiles_from_sdf(sdf_path: str) -> str:
     """Read the first molecule from an SDF and return its canonical SMILES."""
     from rdkit import Chem
 
-    suppl = Chem.SDMolSupplier(sdf_path, removeHs=True)
+    try:
+        suppl = Chem.SDMolSupplier(sdf_path, removeHs=True)
+    except OSError as exc:
+        raise ValueError(f"Cannot open SDF file {sdf_path}: {exc}") from exc
     mol = next(iter(suppl), None)
     if mol is None:
         raise ValueError(f"Cannot read molecule from {sdf_path}")

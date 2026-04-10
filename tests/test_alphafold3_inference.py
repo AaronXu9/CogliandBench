@@ -30,6 +30,13 @@ class TestSmilesFromSdf:
         assert mol is not None
         assert Chem.MolToSmiles(mol) == smiles
 
+    def test_raises_value_error_for_missing_file(self, tmp_path):
+        from cogligandbench.models.alphafold3_inference import _smiles_from_sdf
+
+        missing = tmp_path / "does_not_exist.sdf"
+        with pytest.raises(ValueError, match="Cannot open SDF file"):
+            _smiles_from_sdf(str(missing))
+
 
 class TestBuildAf3InputJson:
     def test_structure_has_required_top_level_keys(self):
