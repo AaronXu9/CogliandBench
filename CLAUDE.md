@@ -291,7 +291,7 @@ All methods accept a `protein` PDB and `ligand` SDF as inputs. The table below s
 - Runs in **single-sequence / no-MSA mode** — no MSA databases, no `db_dir`. Inference uses `--norun_data_pipeline`.
 - Config: `cogligand_config/model/alphafold3_inference.yaml`
   - `cuda_device_index`: GPU to bind via `CUDA_VISIBLE_DEVICES`
-  - `num_samples`, `num_seeds`, `num_recycles`: AF3 inference knobs
+  - `num_samples` (mapped to AF3's `--num_diffusion_samples`), `num_seeds`, `num_recycles`: AF3 inference knobs. Exact CLI flag spellings may drift across AF3 releases; reconcile against `run_alphafold.py --help` after install.
   - `num_poses_to_keep`: how many top-ranked SDFs to write per system
   - `timeout_seconds`: per-system hard cap (default 3600)
 
