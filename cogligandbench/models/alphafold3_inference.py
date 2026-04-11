@@ -157,6 +157,13 @@ def _extract_ranked_ligand_sdfs(
     ``out_dir``. Bond orders are recovered from the input ``smiles`` template.
 
     Returns the number of SDFs successfully written.
+
+    ``out_dir`` is created with ``mkdir(parents=True, exist_ok=True)`` so it
+    must be a directory path; passing a path that points at an existing file
+    will raise ``FileExistsError``.
+
+    Passing ``num_poses=0`` is a no-op: the function returns 0 without
+    writing any files or raising.
     """
     import pandas as pd
     from rdkit import Chem
