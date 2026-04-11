@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -287,3 +288,50 @@ class TestExtractRankedLigandSdfs:
         )
         sdfs = sorted(p.name for p in out.glob("rank*.sdf"))
         assert sdfs == ["rank1.sdf", "rank2.sdf"]  # only top-2 written
+
+
+class TestRunSingle:
+    def test_run_single_writes_rank_sdfs_with_mocked_subprocess(self, tmp_path, monkeypatch):
+        _require_fixture()
+        import cogligandbench.models.alphafold3_inference as af3_mod
+
+        config = {
+            "alphafold3_env": "/nonexistent/env",
+            "alphafold3_dir": "/nonexistent/dir",
+            "model_dir": "/nonexistent/models",
+            "num_samples": 2,
+            "num_seeds": 1,
+            "num_poses_to_keep": 2,
+        }
+
+        # Stub subprocess: write a tiny AF3-like output tree directly
+        def fake_subprocess(json_path, out_dir, cfg):
+            import json
+            with open(json_path) as fh:
+                payload = json.load(fh)
+            sys_id = payload["name"]
+            af3_dir = Path(out_dir) / sys_id.lower()
+            af3_dir.mkdir(parents=True, exist_ok=True)
+            for s in range(2):
+                d = af3_dir / f"seed-1234_sample-{s}"
+                d.mkdir()
+                _write_tiny_cif_from_sdf(FIXTURE_LIGAND, d / "model.cif")
+            (af3_dir / "ranking_scores.csv").write_text(
+                "seed,sample,ranking_score\n1234,0,0.30\n1234,1,0.70\n"
+            )
+
+        monkeypatch.setattr(af3_mod, "_run_af3_subprocess", fake_subprocess)
+
+        out = tmp_path / "out"
+        out.mkdir()
+
+        result = af3_mod.run_single(
+            protein=FIXTURE_PROTEIN,
+            ligand=FIXTURE_LIGAND,
+            output_dir=str(out),
+            config=config,
+            prefix="8gkf_test",
+        )
+        assert result == str(out)
+        sdfs = sorted(p.name for p in out.glob("rank*.sdf"))
+        assert sdfs == ["rank1.sdf", "rank2.sdf"]

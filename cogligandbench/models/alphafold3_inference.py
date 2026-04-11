@@ -255,10 +255,50 @@ def run_single(
 ) -> str:
     """Dock a single protein+ligand pair with AlphaFold3.
 
-    Implementation lands in a later task; this stub exists so the engine
-    registration tests pass.
+    Writes the AF3 input JSON, runs the subprocess, then extracts the top-N
+    ranked ligand poses as ``rank{1..N}.sdf`` directly into ``output_dir``.
+    Returns ``output_dir`` on success.
     """
-    raise NotImplementedError("alphafold3 run_single not implemented yet")
+    import json
+
+    config = config or {}
+
+    # Validate required config keys at the API boundary so missing keys
+    # surface a clear error instead of a bare KeyError from inside a helper.
+    for required_key in ("alphafold3_env", "alphafold3_dir", "model_dir"):
+        if required_key not in config:
+            raise ValueError(
+                f"alphafold3 run_single: missing required config key '{required_key}'"
+            )
+
+    prefix = prefix or os.path.splitext(os.path.basename(protein))[0]
+    output_dir = os.path.abspath(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
+
+    # 1. Build the input JSON
+    payload = _build_af3_input_json(prefix, protein, ligand)
+    json_path = Path(output_dir) / f"{prefix}_af3_input.json"
+    with open(json_path, "w") as fh:
+        json.dump(payload, fh, indent=2)
+
+    # 2. Run AF3 (writes to output_dir/{prefix.lower()}/...)
+    _run_af3_subprocess(json_path, Path(output_dir), config)
+
+    # 3. Extract the ranked ligand SDFs
+    smiles = _smiles_from_sdf(ligand)
+    af3_system_dir = Path(output_dir) / prefix.lower()
+    if not af3_system_dir.exists():
+        raise FileNotFoundError(
+            f"AF3 produced no output directory at {af3_system_dir}"
+        )
+    num_poses = int(config.get("num_poses_to_keep", config.get("num_samples", 5)))
+    _extract_ranked_ligand_sdfs(
+        af3_system_dir,
+        smiles=smiles,
+        out_dir=Path(output_dir),
+        num_poses=num_poses,
+    )
+    return output_dir
 
 
 def run_dataset(config: dict) -> None:
