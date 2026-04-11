@@ -321,8 +321,15 @@ def run_dataset(config: dict) -> None:
     max_num_inputs = config.get("max_num_inputs", None)
 
     os.makedirs(output_dir, exist_ok=True)
+    # get_custom_logger reads a flat `log_dir` key but the YAML nests it under
+    # `logging.log_dir`; flatten before passing so logs land in the configured
+    # directory instead of the caller's cwd.
+    logging_cfg = config.get("logging") or {}
+    log_config = dict(config)
+    if logging_cfg.get("log_dir") and "log_dir" not in log_config:
+        log_config["log_dir"] = logging_cfg["log_dir"]
     logger = get_custom_logger(
-        "alphafold3", config,
+        "alphafold3", log_config,
         f"alphafold3_timing_{config.get('dataset', 'unknown')}_{config.get('repeat_index', 0)}.log",
     )
 
