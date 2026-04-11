@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **CogLigandBench** is a protein-ligand docking benchmarking framework designed specifically for **crystal/experimental PDB structures** (holo structures). It evaluates docking methods against ground-truth ligand poses from the PDB.
 
-Supported methods: AutoDock Vina, GNINA, Chai-1, DynamicBind, UniDock2, SurfDock, DiffDock, FABind, NeuralPLexer, RoseTTAFold-All-Atom, ICM.
+Supported methods: AutoDock Vina, GNINA, Chai-1, DynamicBind, UniDock2, SurfDock, AlphaFold3, DiffDock, FABind, NeuralPLexer, RoseTTAFold-All-Atom, ICM.
 
 Primary benchmark dataset: **runsNposes**. Additional datasets: Astex Diverse, PoseBusters, DockGen, CASP15.
 
