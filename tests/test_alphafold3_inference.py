@@ -382,3 +382,131 @@ class TestRunSingle:
         assert result == str(out)
         sdfs = sorted(p.name for p in out.glob("rank*.sdf"))
         assert sdfs == ["rank1.sdf", "rank2.sdf"]
+
+
+class TestRunDataset:
+    def _make_fake_dataset(self, root, system_ids):
+        """Build data/runsNposes-style folders under ``root``."""
+        import shutil
+        for sid in system_ids:
+            sys_dir = root / sid
+            sys_dir.mkdir(parents=True)
+            shutil.copy(FIXTURE_PROTEIN, sys_dir / f"{sid}_protein.pdb")
+            shutil.copy(FIXTURE_LIGAND, sys_dir / f"{sid}_ligand.sdf")
+
+    def test_run_dataset_iterates_systems_and_writes_rank_sdfs(self, tmp_path, monkeypatch):
+        _require_fixture()
+        import cogligandbench.models.alphafold3_inference as af3_mod
+
+        input_dir = tmp_path / "data"
+        output_dir = tmp_path / "out"
+        input_dir.mkdir()
+        self._make_fake_dataset(input_dir, ["sys_a", "sys_b"])
+
+        call_count = {"n": 0}
+
+        def fake_subprocess(json_path, out_dir, cfg):
+            import json as _json
+            call_count["n"] += 1
+            with open(json_path) as fh:
+                payload = _json.load(fh)
+            sys_id = payload["name"]
+            af3_dir = Path(out_dir) / sys_id.lower()
+            af3_dir.mkdir(parents=True, exist_ok=True)
+            (af3_dir / "seed-1234_sample-0").mkdir()
+            _write_tiny_cif_from_sdf(
+                FIXTURE_LIGAND, af3_dir / "seed-1234_sample-0" / "model.cif"
+            )
+            (af3_dir / "ranking_scores.csv").write_text(
+                "seed,sample,ranking_score\n1234,0,0.50\n"
+            )
+
+        monkeypatch.setattr(af3_mod, "_run_af3_subprocess", fake_subprocess)
+
+        config = {
+            "input_dir": str(input_dir),
+            "output_dir": str(output_dir),
+            "alphafold3_env": "/nonexistent",
+            "alphafold3_dir": "/nonexistent",
+            "model_dir": "/nonexistent",
+            "num_samples": 1,
+            "num_seeds": 1,
+            "num_poses_to_keep": 1,
+            "skip_existing": True,
+            "max_num_inputs": None,
+            "repeat_index": 0,
+            "dataset": "fake",
+            "logging": {
+                "level": "INFO",
+                "file": "alphafold3_test.log",
+                "console": False,
+                "log_dir": str(tmp_path / "logs"),
+            },
+        }
+        af3_mod.run_dataset(config)
+
+        assert call_count["n"] == 2
+        assert (output_dir / "sys_a" / "rank1.sdf").exists()
+        assert (output_dir / "sys_b" / "rank1.sdf").exists()
+
+    def test_run_dataset_skips_already_completed_systems(self, tmp_path, monkeypatch):
+        _require_fixture()
+        import cogligandbench.models.alphafold3_inference as af3_mod
+
+        input_dir = tmp_path / "data"
+        output_dir = tmp_path / "out"
+        input_dir.mkdir()
+        output_dir.mkdir()
+        self._make_fake_dataset(input_dir, ["already_done", "needs_work"])
+
+        # Pre-populate one system's rank1.sdf
+        done_dir = output_dir / "already_done"
+        done_dir.mkdir()
+        (done_dir / "rank1.sdf").write_text("dummy\n")
+
+        call_count = {"n": 0}
+
+        def fake_subprocess(json_path, out_dir, cfg):
+            import json as _json
+            call_count["n"] += 1
+            with open(json_path) as fh:
+                sys_id = _json.load(fh)["name"]
+            af3_dir = Path(out_dir) / sys_id.lower()
+            af3_dir.mkdir(parents=True, exist_ok=True)
+            (af3_dir / "seed-1234_sample-0").mkdir()
+            _write_tiny_cif_from_sdf(
+                FIXTURE_LIGAND, af3_dir / "seed-1234_sample-0" / "model.cif"
+            )
+            (af3_dir / "ranking_scores.csv").write_text(
+                "seed,sample,ranking_score\n1234,0,0.50\n"
+            )
+
+        monkeypatch.setattr(af3_mod, "_run_af3_subprocess", fake_subprocess)
+
+        config = {
+            "input_dir": str(input_dir),
+            "output_dir": str(output_dir),
+            "alphafold3_env": "/nonexistent",
+            "alphafold3_dir": "/nonexistent",
+            "model_dir": "/nonexistent",
+            "num_samples": 1,
+            "num_seeds": 1,
+            "num_poses_to_keep": 1,
+            "skip_existing": True,
+            "max_num_inputs": None,
+            "repeat_index": 0,
+            "dataset": "fake",
+            "logging": {
+                "level": "INFO",
+                "file": "alphafold3_test.log",
+                "console": False,
+                "log_dir": str(tmp_path / "logs"),
+            },
+        }
+        af3_mod.run_dataset(config)
+
+        # Only "needs_work" should have been processed
+        assert call_count["n"] == 1
+        assert (output_dir / "needs_work" / "rank1.sdf").exists()
+        # The pre-populated one should be untouched
+        assert (output_dir / "already_done" / "rank1.sdf").read_text() == "dummy\n"

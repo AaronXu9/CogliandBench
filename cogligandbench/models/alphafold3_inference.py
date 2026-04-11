@@ -304,7 +304,61 @@ def run_single(
 def run_dataset(config: dict) -> None:
     """Run AlphaFold3 over an entire dataset directory.
 
-    Implementation lands in a later task; this stub exists so the engine
-    registration tests pass.
+    Iterates the per-system folders under ``config['input_dir']``. Each
+    folder is expected to contain ``{sys_id}_protein.pdb`` and
+    ``{sys_id}_ligand.sdf``. Writes ``rank{N}.sdf`` files into
+    ``config['output_dir']/{sys_id}/`` per system. On any failure, logs and
+    moves on.
     """
-    raise NotImplementedError("alphafold3 run_dataset not implemented yet")
+    import time
+    import traceback
+
+    from cogligandbench.utils.log import get_custom_logger
+
+    input_dir = config["input_dir"]
+    output_dir = config["output_dir"]
+    skip_existing = config.get("skip_existing", True)
+    max_num_inputs = config.get("max_num_inputs", None)
+
+    os.makedirs(output_dir, exist_ok=True)
+    logger = get_custom_logger(
+        "alphafold3", config,
+        f"alphafold3_timing_{config.get('dataset', 'unknown')}_{config.get('repeat_index', 0)}.log",
+    )
+
+    num_processed = 0
+    for sys_id in sorted(os.listdir(input_dir)):
+        sys_in = os.path.join(input_dir, sys_id)
+        if not os.path.isdir(sys_in):
+            continue
+        if max_num_inputs is not None and num_processed >= max_num_inputs:
+            logger.info(f"Reached max_num_inputs={max_num_inputs}. Stopping.")
+            break
+
+        sys_out = os.path.join(output_dir, sys_id)
+        if skip_existing and os.path.exists(os.path.join(sys_out, "rank1.sdf")):
+            logger.info(f"Skipping {sys_id} — rank1.sdf already exists.")
+            continue
+
+        protein = os.path.join(sys_in, f"{sys_id}_protein.pdb")
+        ligand = os.path.join(sys_in, f"{sys_id}_ligand.sdf")
+        if not (os.path.exists(protein) and os.path.exists(ligand)):
+            logger.warning(f"Missing protein or ligand for {sys_id}. Skipping.")
+            continue
+
+        os.makedirs(sys_out, exist_ok=True)
+        start = time.time()
+        try:
+            run_single(
+                protein=protein,
+                ligand=ligand,
+                output_dir=sys_out,
+                config=config,
+                prefix=sys_id,
+            )
+            logger.info(f"{sys_id},{time.time() - start:.2f}")
+            num_processed += 1
+        except Exception as e:
+            logger.error(f"Failed {sys_id}: {e}")
+            with open(os.path.join(sys_out, "error_log.txt"), "w") as fh:
+                traceback.print_exc(file=fh)
