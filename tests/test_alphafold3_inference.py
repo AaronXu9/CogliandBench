@@ -92,7 +92,8 @@ class TestBuildAf3InputJson:
 
 
 def _write_tiny_cif_from_sdf(
-    sdf_path, cif_path, chain_id="L", resname="LIG", use_auth_asym_id=True
+    sdf_path, cif_path, chain_id="L", resname="LIG", use_auth_asym_id=True,
+    translation=(0.0, 0.0, 0.0),
 ):
     """Build a minimal mmCIF containing chain ``chain_id`` HETATM records
     with the heavy-atom coordinates from the first molecule in ``sdf_path``.
@@ -131,6 +132,9 @@ def _write_tiny_cif_from_sdf(
     ]
     for i, atom in enumerate(mol.GetAtoms(), start=1):
         pos = conf.GetAtomPosition(atom.GetIdx())
+        x = pos.x + translation[0]
+        y = pos.y + translation[1]
+        z = pos.z + translation[2]
         elem = atom.GetSymbol()
         # Atom name must be unique within the residue; use element + index
         atom_name = f"{elem}{i}"
@@ -138,12 +142,12 @@ def _write_tiny_cif_from_sdf(
             lines.append(
                 f"HETATM {i} {elem} {atom_name} {resname} {chain_id} 1 "
                 f"{chain_id} 1 "
-                f"{pos.x:.3f} {pos.y:.3f} {pos.z:.3f} 1.00 0.00"
+                f"{x:.3f} {y:.3f} {z:.3f} 1.00 0.00"
             )
         else:
             lines.append(
                 f"HETATM {i} {elem} {atom_name} {resname} {chain_id} 1 "
-                f"{pos.x:.3f} {pos.y:.3f} {pos.z:.3f} 1.00 0.00"
+                f"{x:.3f} {y:.3f} {z:.3f} 1.00 0.00"
             )
     cif_path.write_text("\n".join(lines) + "\n")
 
@@ -207,17 +211,22 @@ class TestExtractRankedLigandSdfs:
             _extract_ranked_ligand_sdfs, _smiles_from_sdf,
         )
 
-        # Build a fake AF3 system output dir with two samples
+        # Build a fake AF3 system output dir with two samples having
+        # DISTINCT geometries so we can verify which one lands at rank1.
         af3_dir = tmp_path / "8gkf_test"
         af3_dir.mkdir()
         sample0 = af3_dir / "seed-1234_sample-0"
         sample1 = af3_dir / "seed-1234_sample-1"
         sample0.mkdir()
         sample1.mkdir()
+        # Sample 0: original coordinates
         _write_tiny_cif_from_sdf(FIXTURE_LIGAND, sample0 / "model.cif")
-        _write_tiny_cif_from_sdf(FIXTURE_LIGAND, sample1 / "model.cif")
+        # Sample 1: translated by (10, 0, 0) Å so we can tell them apart
+        _write_tiny_cif_from_sdf(
+            FIXTURE_LIGAND, sample1 / "model.cif", translation=(10.0, 0.0, 0.0)
+        )
 
-        # ranking_scores: sample 1 ranked higher than sample 0
+        # ranking_scores: sample 1 (translated) ranked higher than sample 0
         (af3_dir / "ranking_scores.csv").write_text(
             "seed,sample,ranking_score\n"
             "1234,0,0.40\n"
@@ -234,11 +243,23 @@ class TestExtractRankedLigandSdfs:
         rank2 = out / "rank2.sdf"
         assert rank1.exists()
         assert rank2.exists()
-        # Both files should be readable as RDKit molecules
+
         m1 = next(Chem.SDMolSupplier(str(rank1), removeHs=True), None)
         m2 = next(Chem.SDMolSupplier(str(rank2), removeHs=True), None)
         assert m1 is not None
         assert m2 is not None
+
+        # rank1 should be the high-scored sample 1 (translated +10 Å along x).
+        # Compare centroid x-coordinates: rank1 must be ~10 Å further along x
+        # than rank2. This confirms ordering is descending by score.
+        c1 = m1.GetConformer()
+        c2 = m2.GetConformer()
+        centroid1_x = sum(c1.GetAtomPosition(i).x for i in range(m1.GetNumAtoms())) / m1.GetNumAtoms()
+        centroid2_x = sum(c2.GetAtomPosition(i).x for i in range(m2.GetNumAtoms())) / m2.GetNumAtoms()
+        assert centroid1_x - centroid2_x > 5.0, (
+            f"rank1 should be the translated (high-scored) sample but got "
+            f"centroid_x diff = {centroid1_x - centroid2_x}"
+        )
 
     def test_respects_num_poses_cap(self, tmp_path):
         _require_fixture()

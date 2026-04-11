@@ -225,7 +225,7 @@ def _extract_ligand_from_cif(cif_path: Path, template_mol: Chem.Mol) -> Chem.Mol
 
 - **Bond-order recovery from the known SMILES** via `rdkit.Chem.AllChem.AssignBondOrdersFromTemplate`. We already fed the SMILES into AF3, so we reuse it here instead of guessing chemistry from 3D distances. This is both correct-by-construction and robust to unusual ligands.
 - **Ranking follows AF3's own `ranking_scores.csv`** (highest score = `rank1`).
-- If `ranking_scores.csv` is missing, fall back to sample-index order.
+- If `ranking_scores.csv` is missing, raise `FileNotFoundError`. Task 7's `run_single` catches this in its per-system error handler and logs the failure.
 
 ### 5.5 Public API
 
