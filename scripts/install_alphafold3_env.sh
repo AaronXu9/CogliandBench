@@ -44,22 +44,28 @@ else
 fi
 
 echo "[5/7] pip-installing AlphaFold3 into ${ENV_PREFIX}"
-"${ENV_PREFIX}/bin/python" -m pip install --upgrade pip
-if [ -f "${AF3_SRC}/dev-requirements.txt" ]; then
-    "${ENV_PREFIX}/bin/python" -m pip install -r "${AF3_SRC}/dev-requirements.txt"
+if ! "${ENV_PREFIX}/bin/python" -c "import alphafold3" >/dev/null 2>&1; then
+    "${ENV_PREFIX}/bin/python" -m pip install --upgrade pip
+    if [ -f "${AF3_SRC}/dev-requirements.txt" ]; then
+        "${ENV_PREFIX}/bin/python" -m pip install -r "${AF3_SRC}/dev-requirements.txt"
+    fi
+    "${ENV_PREFIX}/bin/python" -m pip install -e "${AF3_SRC}"
+else
+    echo "      alphafold3 already importable; skipping pip install"
 fi
-"${ENV_PREFIX}/bin/python" -m pip install -e "${AF3_SRC}"
 
 echo "[6/7] Decompressing weights → ${WEIGHTS_BIN}"
 mkdir -p "${AF3_MODELS}"
 if [ ! -f "${WEIGHTS_BIN}" ]; then
     if [ ! -f "${WEIGHTS_ZST}" ]; then
-        echo "ERROR: ${WEIGHTS_ZST} not found. Place af3.bin.zst at the project root and re-run."
+        echo "ERROR: ${WEIGHTS_ZST} not found. Place af3.bin.zst at the project root and re-run." >&2
         exit 1
     fi
     if command -v zstd >/dev/null 2>&1; then
         zstd -d "${WEIGHTS_ZST}" -o "${WEIGHTS_BIN}"
     else
+        echo "      zstd CLI not found; using Python zstandard fallback"
+        "${ENV_PREFIX}/bin/python" -m pip install --quiet zstandard
         "${ENV_PREFIX}/bin/python" - <<PY
 import zstandard, pathlib
 src = pathlib.Path("${WEIGHTS_ZST}")
@@ -81,4 +87,4 @@ echo "  env:     ${ENV_PREFIX}  (symlinked from ${ENV_LINK})"
 echo "  source:  ${AF3_SRC}"
 echo "  weights: ${WEIGHTS_BIN}"
 echo
-echo "Next: run 'bash ${PROJECT_ROOT}/envs/alphafold3/bin/python ${AF3_SRC}/run_alphafold.py --help' to see the CLI surface (Task 10)."
+echo "Next: run '${PROJECT_ROOT}/envs/alphafold3/bin/python ${AF3_SRC}/run_alphafold.py --help' to see the CLI surface (Task 10)."
