@@ -197,3 +197,72 @@ class TestExtractLigandFromCif:
         mol = _extract_ligand_from_cif(cif_path, template_mol=template)
         assert mol is not None
         assert Chem.MolToSmiles(Chem.RemoveHs(mol)) == _smiles_from_sdf(FIXTURE_LIGAND)
+
+
+class TestExtractRankedLigandSdfs:
+    def test_writes_rank_files_in_score_order(self, tmp_path):
+        _require_fixture()
+        from rdkit import Chem
+        from cogligandbench.models.alphafold3_inference import (
+            _extract_ranked_ligand_sdfs, _smiles_from_sdf,
+        )
+
+        # Build a fake AF3 system output dir with two samples
+        af3_dir = tmp_path / "8gkf_test"
+        af3_dir.mkdir()
+        sample0 = af3_dir / "seed-1234_sample-0"
+        sample1 = af3_dir / "seed-1234_sample-1"
+        sample0.mkdir()
+        sample1.mkdir()
+        _write_tiny_cif_from_sdf(FIXTURE_LIGAND, sample0 / "model.cif")
+        _write_tiny_cif_from_sdf(FIXTURE_LIGAND, sample1 / "model.cif")
+
+        # ranking_scores: sample 1 ranked higher than sample 0
+        (af3_dir / "ranking_scores.csv").write_text(
+            "seed,sample,ranking_score\n"
+            "1234,0,0.40\n"
+            "1234,1,0.85\n"
+        )
+
+        smiles = _smiles_from_sdf(FIXTURE_LIGAND)
+        out = tmp_path / "out"
+        out.mkdir()
+
+        _extract_ranked_ligand_sdfs(af3_dir, smiles=smiles, out_dir=out, num_poses=2)
+
+        rank1 = out / "rank1.sdf"
+        rank2 = out / "rank2.sdf"
+        assert rank1.exists()
+        assert rank2.exists()
+        # Both files should be readable as RDKit molecules
+        m1 = next(Chem.SDMolSupplier(str(rank1), removeHs=True), None)
+        m2 = next(Chem.SDMolSupplier(str(rank2), removeHs=True), None)
+        assert m1 is not None
+        assert m2 is not None
+
+    def test_respects_num_poses_cap(self, tmp_path):
+        _require_fixture()
+        from cogligandbench.models.alphafold3_inference import (
+            _extract_ranked_ligand_sdfs, _smiles_from_sdf,
+        )
+
+        af3_dir = tmp_path / "sys"
+        af3_dir.mkdir()
+        for s in range(3):
+            d = af3_dir / f"seed-1234_sample-{s}"
+            d.mkdir()
+            _write_tiny_cif_from_sdf(FIXTURE_LIGAND, d / "model.cif")
+        (af3_dir / "ranking_scores.csv").write_text(
+            "seed,sample,ranking_score\n"
+            "1234,0,0.10\n"
+            "1234,1,0.50\n"
+            "1234,2,0.30\n"
+        )
+
+        out = tmp_path / "out"
+        out.mkdir()
+        _extract_ranked_ligand_sdfs(
+            af3_dir, smiles=_smiles_from_sdf(FIXTURE_LIGAND), out_dir=out, num_poses=2,
+        )
+        sdfs = sorted(p.name for p in out.glob("rank*.sdf"))
+        assert sdfs == ["rank1.sdf", "rank2.sdf"]  # only top-2 written
