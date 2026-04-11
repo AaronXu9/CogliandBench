@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **CogLigandBench** is a protein-ligand docking benchmarking framework designed specifically for **crystal/experimental PDB structures** (holo structures). It evaluates docking methods against ground-truth ligand poses from the PDB.
 
-Supported methods: AutoDock Vina, GNINA, Chai-1, DynamicBind, UniDock2, SurfDock, DiffDock, FABind, NeuralPLexer, RoseTTAFold-All-Atom, ICM.
+Supported methods: AutoDock Vina, GNINA, Chai-1, DynamicBind, UniDock2, SurfDock, AlphaFold3, DiffDock, FABind, NeuralPLexer, RoseTTAFold-All-Atom, ICM.
 
 Primary benchmark dataset: **runsNposes**. Additional datasets: Astex Diverse, PoseBusters, DockGen, CASP15.
 
@@ -109,6 +109,7 @@ All methods accept a `protein` PDB and `ligand` SDF as inputs. The table below s
 | `dynamicbind` | `rank{N}_ligand_lddt*.sdf` | DynamicBind rank | `forks/DynamicBind/DynamicBind` | `run_single_protein_inference.py` |
 | `unidock2` | `rank{N}.sdf` | Vina energy (lowest best) | `unidock2` conda env | `unidock2` command |
 | `surfdock` | `rank{N}.sdf` | Confidence (highest best) | `SurfDock` conda env | MSMS, APBS, ESM, `accelerate` |
+| `alphafold3` | `rank{N}.sdf` | AF3 ranking_score (highest best) | `envs/alphafold3` (symlink) | AF3 source clone, decompressed `af3.bin` weights |
 
 ---
 
@@ -267,6 +268,32 @@ All methods accept a `protein` PDB and `ligand` SDF as inputs. The table below s
 - `inputs_csv`: pre-built input CSV
 - `esm_embeddings_path`: pre-computed `.pt` embeddings
 - `surface_dir`: pre-computed 8 Å surface files
+
+---
+
+### AlphaFold3
+
+**Input preprocessing:**
+- Protein chain sequences extracted from the PDB via `cogligandbench.utils.sequence.extract_protein_sequence` (CA atoms, biopandas, AA3→AA1 mapping with `X` for unknowns).
+- Ligand SMILES extracted from the SDF via RDKit (`Chem.SDMolSupplier` → `MolToSmiles`, canonical).
+- An AF3 input JSON is built per system: one `protein` entry per chain (chain ids `A`, `B`, ..., each with a single-sequence A3M as `unpairedMsa`, empty `pairedMsa`, empty `templates`) and one `ligand` entry on chain `L` carrying the canonical SMILES. `dialect: "alphafold3"`, `version: 2`, `modelSeeds: [1234]`.
+- This JSON is written to `{output_dir}/{prefix}_af3_input.json` before each run for inspection.
+
+**Outputs:** `{output_dir}/rank{N}.sdf` — top-N ligand poses extracted from the predicted mmCIFs and bond-order-recovered against the input SMILES via `rdkit.Chem.AllChem.AssignBondOrdersFromTemplate`. Ranked by AF3's own `ranking_scores.csv` (highest score = `rank1.sdf`). Intermediate AF3 outputs (full mmCIFs, confidence JSONs) remain in `{output_dir}/{prefix_lowercase}/` for post-mortem.
+
+**Post-processing:** None — extraction is inline. SDFs are ready for downstream RMSD analysis.
+
+**Requirements:**
+- Conda env at `{PROJECT_ROOT}/envs/alphafold3` (symlink to `/mnt/katritch_lab2/aoxu/envs/alphafold3`). Created by `bash scripts/install_alphafold3_env.sh`.
+- AF3 source clone at `{PROJECT_ROOT}/forks/alphafold3/alphafold3` (created by the same install script).
+- Decompressed weights at `{PROJECT_ROOT}/forks/alphafold3/models/af3.bin` (decompressed from `af3.bin.zst` by the install script).
+- GPU required. `num_recycles=10`, `num_samples=5` on the default config; reduce for faster smoke tests.
+- Runs in **single-sequence / no-MSA mode** — no MSA databases, no `db_dir`. Inference uses `--norun_data_pipeline`.
+- Config: `cogligand_config/model/alphafold3_inference.yaml`
+  - `cuda_device_index`: GPU to bind via `CUDA_VISIBLE_DEVICES`
+  - `num_samples` (mapped to AF3's `--num_diffusion_samples`), `num_seeds`, `num_recycles`: AF3 inference knobs. Exact CLI flag spellings may drift across AF3 releases; reconcile against `run_alphafold.py --help` after install.
+  - `num_poses_to_keep`: how many top-ranked SDFs to write per system
+  - `timeout_seconds`: per-system hard cap (default 3600)
 
 ---
 

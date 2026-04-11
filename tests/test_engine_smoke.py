@@ -198,3 +198,31 @@ class TestEndToEnd:
             assert result is not None
             sdfs = glob.glob(os.path.join(result, "rank*.sdf"))
             assert len(sdfs) >= 1, f"No rank*.sdf files found in {result}"
+
+    def test_alphafold3_single(self):
+        af3_env = os.path.join(PROJECT_ROOT, "envs", "alphafold3")
+        af3_weights = os.path.join(PROJECT_ROOT, "forks", "alphafold3", "models", "af3.bin")
+        af3_run = os.path.join(PROJECT_ROOT, "forks", "alphafold3", "alphafold3", "run_alphafold.py")
+        if not os.path.exists(os.path.join(af3_env, "bin", "python")):
+            pytest.skip(f"AlphaFold3 env not found: {af3_env}")
+        if not os.path.exists(af3_weights):
+            pytest.skip(f"AlphaFold3 weights not found: {af3_weights}")
+        if not os.path.exists(af3_run):
+            pytest.skip(f"AlphaFold3 source not found: {af3_run}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            result = dock_engine(
+                "alphafold3",
+                protein=FIXTURE_PROTEIN,
+                ligand=FIXTURE_LIGAND,
+                output_dir=tmp,
+                prefix="8gkf_test",
+                num_samples=1,
+                num_seeds=1,
+                num_recycles=3,         # fast path for the test
+                num_poses_to_keep=1,
+                timeout_seconds=1800,
+            )
+            assert result is not None
+            sdfs = glob.glob(os.path.join(result, "rank*.sdf"))
+            assert len(sdfs) >= 1, f"No rank*.sdf files found in {result}"
