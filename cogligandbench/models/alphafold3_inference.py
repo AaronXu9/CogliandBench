@@ -185,7 +185,7 @@ def _extract_ranked_ligand_sdfs(
         raise ValueError(f"Could not parse template SMILES: {smiles}")
 
     written = 0
-    for rank, row in scores.head(num_poses).iterrows():
+    for _, row in scores.head(num_poses).iterrows():
         seed = int(row["seed"])
         sample = int(row["sample"])
         cif = af3_system_dir / f"seed-{seed}_sample-{sample}" / "model.cif"
@@ -195,8 +195,8 @@ def _extract_ranked_ligand_sdfs(
             mol = _extract_ligand_from_cif(cif, template_mol=template)
         except Exception:
             continue
-        Chem.MolToMolFile(mol, str(out_dir / f"rank{rank + 1}.sdf"))
         written += 1
+        Chem.MolToMolFile(mol, str(out_dir / f"rank{written}.sdf"))
     return written
 
 
