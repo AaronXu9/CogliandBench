@@ -144,6 +144,54 @@ def _extract_ligand_from_cif(
     return annotated
 
 
+def _extract_ranked_ligand_sdfs(
+    af3_system_dir: str | Path,
+    smiles: str,
+    out_dir: str | Path,
+    num_poses: int,
+) -> int:
+    """Read ``ranking_scores.csv``, sort by score desc, write top-N rank{i}.sdf.
+
+    Walks the per-system AF3 output directory, reads the ranking CSV, and
+    writes the top ``num_poses`` ligand poses as ``rank{1..N}.sdf`` in
+    ``out_dir``. Bond orders are recovered from the input ``smiles`` template.
+
+    Returns the number of SDFs successfully written.
+    """
+    import pandas as pd
+    from rdkit import Chem
+
+    af3_system_dir = Path(af3_system_dir)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    scores_path = af3_system_dir / "ranking_scores.csv"
+    if not scores_path.exists():
+        raise FileNotFoundError(f"AF3 ranking_scores.csv not found at {scores_path}")
+
+    scores = pd.read_csv(scores_path)
+    scores = scores.sort_values("ranking_score", ascending=False).reset_index(drop=True)
+
+    template = Chem.MolFromSmiles(smiles)
+    if template is None:
+        raise ValueError(f"Could not parse template SMILES: {smiles}")
+
+    written = 0
+    for rank, row in scores.head(num_poses).iterrows():
+        seed = int(row["seed"])
+        sample = int(row["sample"])
+        cif = af3_system_dir / f"seed-{seed}_sample-{sample}" / "model.cif"
+        if not cif.exists():
+            continue
+        try:
+            mol = _extract_ligand_from_cif(cif, template_mol=template)
+        except Exception:
+            continue
+        Chem.MolToMolFile(mol, str(out_dir / f"rank{rank + 1}.sdf"))
+        written += 1
+    return written
+
+
 def run_single(
     protein: str,
     ligand: str,
