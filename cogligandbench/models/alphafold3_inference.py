@@ -11,6 +11,7 @@ Public surface (used by cogligandbench.engine):
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -197,6 +198,51 @@ def _extract_ranked_ligand_sdfs(
         Chem.MolToMolFile(mol, str(out_dir / f"rank{rank + 1}.sdf"))
         written += 1
     return written
+
+
+def _run_af3_subprocess(
+    json_path: str | Path,
+    out_dir: str | Path,
+    config: dict,
+) -> None:
+    """Invoke AF3's run_alphafold.py via the dedicated conda env's Python.
+
+    Raises ``subprocess.CalledProcessError`` on nonzero exit and
+    ``subprocess.TimeoutExpired`` on hard timeout. Both are caught
+    by callers (run_single / run_dataset).
+
+    NOTE on CLI flag names: ``--num_diffusion_samples``, ``--num_seeds``,
+    and ``--num_recycles`` are intent — the exact spellings can drift across
+    AF3 upstream releases. Task 10 reconciles them against the actually-installed
+    version. The four core flags (--json_path, --output_dir, --model_dir,
+    --norun_data_pipeline) are stable.
+    """
+    import subprocess
+
+    env_python = Path(config["alphafold3_env"]) / "bin" / "python"
+    run_script = Path(config["alphafold3_dir"]) / "run_alphafold.py"
+
+    cmd = [
+        str(env_python), str(run_script),
+        f"--json_path={json_path}",
+        f"--output_dir={out_dir}",
+        f"--model_dir={config['model_dir']}",
+        "--norun_data_pipeline",
+        "--run_inference=true",
+        f"--num_diffusion_samples={config.get('num_samples', 5)}",
+        f"--num_seeds={config.get('num_seeds', 1)}",
+        f"--num_recycles={config.get('num_recycles', 10)}",
+    ]
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = str(config.get("cuda_device_index", 0))
+    env["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+
+    subprocess.run(
+        cmd,
+        env=env,
+        check=True,
+        timeout=config.get("timeout_seconds", 3600),
+    )
 
 
 def run_single(
