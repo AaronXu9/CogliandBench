@@ -289,6 +289,53 @@ class TestExtractRankedLigandSdfs:
         sdfs = sorted(p.name for p in out.glob("rank*.sdf"))
         assert sdfs == ["rank1.sdf", "rank2.sdf"]  # only top-2 written
 
+    def test_top_scored_failure_still_yields_rank1(self, tmp_path, monkeypatch):
+        """If _extract_ligand_from_cif fails for the top-scored sample, the
+        second-best sample should still land at rank1.sdf (not rank2.sdf)."""
+        _require_fixture()
+        import cogligandbench.models.alphafold3_inference as af3_mod
+        from cogligandbench.models.alphafold3_inference import (
+            _extract_ranked_ligand_sdfs, _smiles_from_sdf,
+        )
+
+        af3_dir = tmp_path / "sys"
+        af3_dir.mkdir()
+        for s in range(2):
+            d = af3_dir / f"seed-1234_sample-{s}"
+            d.mkdir()
+            _write_tiny_cif_from_sdf(FIXTURE_LIGAND, d / "model.cif")
+        (af3_dir / "ranking_scores.csv").write_text(
+            "seed,sample,ranking_score\n"
+            "1234,0,0.90\n"  # top-scored, will be made to fail
+            "1234,1,0.50\n"  # second-best, should land at rank1
+        )
+
+        real_extract = af3_mod._extract_ligand_from_cif
+        call_count = {"n": 0}
+
+        def flaky_extract(cif_path, template_mol):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise ValueError("simulated extraction failure on first call")
+            return real_extract(cif_path, template_mol)
+
+        monkeypatch.setattr(af3_mod, "_extract_ligand_from_cif", flaky_extract)
+
+        out = tmp_path / "out"
+        out.mkdir()
+        written = _extract_ranked_ligand_sdfs(
+            af3_dir, smiles=_smiles_from_sdf(FIXTURE_LIGAND), out_dir=out, num_poses=2,
+        )
+
+        # Only one SDF should be written (since first extract failed)
+        assert written == 1
+        assert (out / "rank1.sdf").exists(), (
+            "rank1.sdf should exist even when the top-scored sample's extraction fails"
+        )
+        assert not (out / "rank2.sdf").exists(), (
+            "rank2.sdf should NOT exist when only one extraction succeeded"
+        )
+
 
 class TestRunSingle:
     def test_run_single_writes_rank_sdfs_with_mocked_subprocess(self, tmp_path, monkeypatch):
