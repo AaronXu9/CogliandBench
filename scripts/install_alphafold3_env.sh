@@ -27,7 +27,7 @@ echo "[2/7] Creating conda env at ${ENV_PREFIX}"
 if [ ! -x "${ENV_PREFIX}/bin/python" ]; then
     conda create -y -p "${ENV_PREFIX}" \
         -c bioconda -c conda-forge \
-        python=3.11 hmmer
+        python=3.12 hmmer
 else
     echo "      env already exists; skipping create"
 fi
