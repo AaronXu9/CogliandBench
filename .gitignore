@@ -2,6 +2,11 @@
 .env
 .claude/
 
+# AlphaFold3 — large binaries and cloned source (recreated by install script)
+af3.bin.zst
+forks/alphafold3/alphafold3/
+forks/alphafold3/models/
+
 # Runtime artifacts
 test_output/
 rmsd_analysis_results/
