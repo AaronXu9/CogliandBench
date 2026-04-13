@@ -220,15 +220,16 @@ class TestExtractRankedLigandSdfs:
         sample1 = af3_dir / "seed-1234_sample-1"
         sample0.mkdir()
         sample1.mkdir()
+        name = "8gkf_test"
         # Sample 0: original coordinates
-        _write_tiny_cif_from_sdf(FIXTURE_LIGAND, sample0 / "model.cif")
+        _write_tiny_cif_from_sdf(FIXTURE_LIGAND, sample0 / f"{name}_seed-1234_sample-0_model.cif")
         # Sample 1: translated by (10, 0, 0) Å so we can tell them apart
         _write_tiny_cif_from_sdf(
-            FIXTURE_LIGAND, sample1 / "model.cif", translation=(10.0, 0.0, 0.0)
+            FIXTURE_LIGAND, sample1 / f"{name}_seed-1234_sample-1_model.cif", translation=(10.0, 0.0, 0.0)
         )
 
         # ranking_scores: sample 1 (translated) ranked higher than sample 0
-        (af3_dir / "ranking_scores.csv").write_text(
+        (af3_dir / f"{name}_ranking_scores.csv").write_text(
             "seed,sample,ranking_score\n"
             "1234,0,0.40\n"
             "1234,1,0.85\n"
@@ -238,7 +239,7 @@ class TestExtractRankedLigandSdfs:
         out = tmp_path / "out"
         out.mkdir()
 
-        _extract_ranked_ligand_sdfs(af3_dir, smiles=smiles, out_dir=out, num_poses=2)
+        _extract_ranked_ligand_sdfs(af3_dir, name=name, smiles=smiles, out_dir=out, num_poses=2)
 
         rank1 = out / "rank1.sdf"
         rank2 = out / "rank2.sdf"
@@ -268,13 +269,14 @@ class TestExtractRankedLigandSdfs:
             _extract_ranked_ligand_sdfs, _smiles_from_sdf,
         )
 
-        af3_dir = tmp_path / "sys"
+        name = "sys"
+        af3_dir = tmp_path / name
         af3_dir.mkdir()
         for s in range(3):
             d = af3_dir / f"seed-1234_sample-{s}"
             d.mkdir()
-            _write_tiny_cif_from_sdf(FIXTURE_LIGAND, d / "model.cif")
-        (af3_dir / "ranking_scores.csv").write_text(
+            _write_tiny_cif_from_sdf(FIXTURE_LIGAND, d / f"{name}_seed-1234_sample-{s}_model.cif")
+        (af3_dir / f"{name}_ranking_scores.csv").write_text(
             "seed,sample,ranking_score\n"
             "1234,0,0.10\n"
             "1234,1,0.50\n"
@@ -284,7 +286,7 @@ class TestExtractRankedLigandSdfs:
         out = tmp_path / "out"
         out.mkdir()
         _extract_ranked_ligand_sdfs(
-            af3_dir, smiles=_smiles_from_sdf(FIXTURE_LIGAND), out_dir=out, num_poses=2,
+            af3_dir, name=name, smiles=_smiles_from_sdf(FIXTURE_LIGAND), out_dir=out, num_poses=2,
         )
         sdfs = sorted(p.name for p in out.glob("rank*.sdf"))
         assert sdfs == ["rank1.sdf", "rank2.sdf"]  # only top-2 written
@@ -298,13 +300,14 @@ class TestExtractRankedLigandSdfs:
             _extract_ranked_ligand_sdfs, _smiles_from_sdf,
         )
 
-        af3_dir = tmp_path / "sys"
+        name = "sys"
+        af3_dir = tmp_path / name
         af3_dir.mkdir()
         for s in range(2):
             d = af3_dir / f"seed-1234_sample-{s}"
             d.mkdir()
-            _write_tiny_cif_from_sdf(FIXTURE_LIGAND, d / "model.cif")
-        (af3_dir / "ranking_scores.csv").write_text(
+            _write_tiny_cif_from_sdf(FIXTURE_LIGAND, d / f"{name}_seed-1234_sample-{s}_model.cif")
+        (af3_dir / f"{name}_ranking_scores.csv").write_text(
             "seed,sample,ranking_score\n"
             "1234,0,0.90\n"  # top-scored, will be made to fail
             "1234,1,0.50\n"  # second-best, should land at rank1
@@ -324,7 +327,7 @@ class TestExtractRankedLigandSdfs:
         out = tmp_path / "out"
         out.mkdir()
         written = _extract_ranked_ligand_sdfs(
-            af3_dir, smiles=_smiles_from_sdf(FIXTURE_LIGAND), out_dir=out, num_poses=2,
+            af3_dir, name=name, smiles=_smiles_from_sdf(FIXTURE_LIGAND), out_dir=out, num_poses=2,
         )
 
         # Only one SDF should be written (since first extract failed)
@@ -357,13 +360,13 @@ class TestRunSingle:
             with open(json_path) as fh:
                 payload = json.load(fh)
             sys_id = payload["name"]
-            af3_dir = Path(out_dir) / sys_id.lower()
+            af3_dir = Path(out_dir) / sys_id
             af3_dir.mkdir(parents=True, exist_ok=True)
             for s in range(2):
                 d = af3_dir / f"seed-1234_sample-{s}"
                 d.mkdir()
-                _write_tiny_cif_from_sdf(FIXTURE_LIGAND, d / "model.cif")
-            (af3_dir / "ranking_scores.csv").write_text(
+                _write_tiny_cif_from_sdf(FIXTURE_LIGAND, d / f"{sys_id}_seed-1234_sample-{s}_model.cif")
+            (af3_dir / f"{sys_id}_ranking_scores.csv").write_text(
                 "seed,sample,ranking_score\n1234,0,0.30\n1234,1,0.70\n"
             )
 
@@ -411,13 +414,13 @@ class TestRunDataset:
             with open(json_path) as fh:
                 payload = _json.load(fh)
             sys_id = payload["name"]
-            af3_dir = Path(out_dir) / sys_id.lower()
+            af3_dir = Path(out_dir) / sys_id
             af3_dir.mkdir(parents=True, exist_ok=True)
             (af3_dir / "seed-1234_sample-0").mkdir()
             _write_tiny_cif_from_sdf(
-                FIXTURE_LIGAND, af3_dir / "seed-1234_sample-0" / "model.cif"
+                FIXTURE_LIGAND, af3_dir / "seed-1234_sample-0" / f"{sys_id}_seed-1234_sample-0_model.cif"
             )
-            (af3_dir / "ranking_scores.csv").write_text(
+            (af3_dir / f"{sys_id}_ranking_scores.csv").write_text(
                 "seed,sample,ranking_score\n1234,0,0.50\n"
             )
 
@@ -471,13 +474,13 @@ class TestRunDataset:
             call_count["n"] += 1
             with open(json_path) as fh:
                 sys_id = _json.load(fh)["name"]
-            af3_dir = Path(out_dir) / sys_id.lower()
+            af3_dir = Path(out_dir) / sys_id
             af3_dir.mkdir(parents=True, exist_ok=True)
             (af3_dir / "seed-1234_sample-0").mkdir()
             _write_tiny_cif_from_sdf(
-                FIXTURE_LIGAND, af3_dir / "seed-1234_sample-0" / "model.cif"
+                FIXTURE_LIGAND, af3_dir / "seed-1234_sample-0" / f"{sys_id}_seed-1234_sample-0_model.cif"
             )
-            (af3_dir / "ranking_scores.csv").write_text(
+            (af3_dir / f"{sys_id}_ranking_scores.csv").write_text(
                 "seed,sample,ranking_score\n1234,0,0.50\n"
             )
 
