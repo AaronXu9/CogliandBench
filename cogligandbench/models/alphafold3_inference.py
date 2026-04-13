@@ -147,11 +147,16 @@ def _extract_ligand_from_cif(
 
 def _extract_ranked_ligand_sdfs(
     af3_system_dir: str | Path,
+    name: str,
     smiles: str,
     out_dir: str | Path,
     num_poses: int,
 ) -> int:
-    """Read ``ranking_scores.csv``, sort by score desc, write top-N rank{i}.sdf.
+    """Read AF3's ranking CSV, sort by score desc, write top-N rank{i}.sdf.
+
+    AF3 v3.0.1 prefixes all output filenames with the job name:
+    ``{name}_ranking_scores.csv`` and
+    ``seed-{s}_sample-{n}/{name}_seed-{s}_sample-{n}_model.cif``.
 
     Walks the per-system AF3 output directory, reads the ranking CSV, and
     writes the top ``num_poses`` ligand poses as ``rank{1..N}.sdf`` in
@@ -173,7 +178,7 @@ def _extract_ranked_ligand_sdfs(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    scores_path = af3_system_dir / "ranking_scores.csv"
+    scores_path = af3_system_dir / f"{name}_ranking_scores.csv"
     if not scores_path.exists():
         raise FileNotFoundError(f"AF3 ranking_scores.csv not found at {scores_path}")
 
@@ -188,7 +193,7 @@ def _extract_ranked_ligand_sdfs(
     for _, row in scores.head(num_poses).iterrows():
         seed = int(row["seed"])
         sample = int(row["sample"])
-        cif = af3_system_dir / f"seed-{seed}_sample-{sample}" / "model.cif"
+        cif = af3_system_dir / f"seed-{seed}_sample-{sample}" / f"{name}_seed-{seed}_sample-{sample}_model.cif"
         if not cif.exists():
             continue
         try:
@@ -301,8 +306,11 @@ def run_single(
     _run_af3_subprocess(json_path, Path(output_dir), config)
 
     # 3. Extract the ranked ligand SDFs
+    # AF3 writes to {output_dir}/{name}/ using the exact name from the JSON
+    # (no lowercasing). The name in the JSON is set to `prefix` by
+    # _build_af3_input_json.
     smiles = _smiles_from_sdf(ligand)
-    af3_system_dir = Path(output_dir) / prefix.lower()
+    af3_system_dir = Path(output_dir) / prefix
     if not af3_system_dir.exists():
         raise FileNotFoundError(
             f"AF3 produced no output directory at {af3_system_dir}"
@@ -310,6 +318,7 @@ def run_single(
     num_poses = int(config.get("num_poses_to_keep", config.get("num_samples", 5)))
     _extract_ranked_ligand_sdfs(
         af3_system_dir,
+        name=prefix,
         smiles=smiles,
         out_dir=Path(output_dir),
         num_poses=num_poses,
