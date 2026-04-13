@@ -481,7 +481,7 @@ def parse_config_file_with_omegaconf(config_path):
     
     # Set up environment variables for resolution
     # In a real application, these should be set before calling this function
-    os.environ["PROJECT_ROOT"] = "/home/aoxu/projects/PoseBench"  # Example value
+    os.environ["PROJECT_ROOT"] = "/mnt/katritch_lab2/aoxu/CogLigandBench"  # Example value
     
     # Load the configuration from file
     cfg = OmegaConf.load(config_path)

@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------------------------------------------------------------------
-# Following code curated for PoseBench: (https://github.com/BioinfoMachineLearning/PoseBench)
+# Originally from PoseBench (https://github.com/BioinfoMachineLearning/PoseBench), adapted for CogLigandBench
 # -------------------------------------------------------------------------------------------------------------------------------------
 
 import glob
@@ -151,8 +151,8 @@ def main(cfg: DictConfig):
                     str(cfg.python_exec_path),
                     "--results",
                     str(os.path.join(cfg.dynamicbind_exec_dir, "inference", "outputs", "results")),
-                    "--no_relax",  # NOTE: must be set to `True` within `PoseBench` since method-native relaxation is not supported
-                    "--paper",  # NOTE: must be set to `True` within `PoseBench` since only the paper weights are available
+                    "--no_relax",  # NOTE: must be set to `True` for CogLigandBench since method-native relaxation is not supported
+                    "--paper",  # NOTE: must be set to `True` for CogLigandBench since only the paper weights are available
                 ],
                 check=True,
             )  # nosec

@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------------------------------------------------------------------
-# Following code curated for PoseBench: (https://github.com/BioinfoMachineLearning/PoseBench)
+# Originally from PoseBench (https://github.com/BioinfoMachineLearning/PoseBench), adapted for CogLigandBench
 # -------------------------------------------------------------------------------------------------------------------------------------
 
 import logging
