@@ -20,10 +20,10 @@ AF3_MODELS="${PROJECT_ROOT}/forks/alphafold3/models"
 WEIGHTS_ZST="${PROJECT_ROOT}/af3.bin.zst"
 WEIGHTS_BIN="${AF3_MODELS}/af3.bin"
 
-echo "[1/7] Ensuring env parent directory exists at ${ENV_PARENT}"
+echo "[1/8] Ensuring env parent directory exists at ${ENV_PARENT}"
 mkdir -p "${ENV_PARENT}"
 
-echo "[2/7] Creating conda env at ${ENV_PREFIX}"
+echo "[2/8] Creating conda env at ${ENV_PREFIX}"
 if [ ! -x "${ENV_PREFIX}/bin/python" ]; then
     conda create -y -p "${ENV_PREFIX}" \
         -c bioconda -c conda-forge \
@@ -32,29 +32,40 @@ else
     echo "      env already exists; skipping create"
 fi
 
-echo "[3/7] Symlinking ${ENV_LINK} → ${ENV_PREFIX}"
+echo "[3/8] Symlinking ${ENV_LINK} → ${ENV_PREFIX}"
 mkdir -p "${PROJECT_ROOT}/envs"
 ln -sfn "${ENV_PREFIX}" "${ENV_LINK}"
 
-echo "[4/7] Cloning AlphaFold3 source to ${AF3_SRC}"
+echo "[4/8] Cloning AlphaFold3 source to ${AF3_SRC}"
 if [ ! -d "${AF3_SRC}/.git" ]; then
     git clone https://github.com/google-deepmind/alphafold3 "${AF3_SRC}"
 else
     echo "      AF3 source already cloned; skipping"
 fi
 
-echo "[5/7] pip-installing AlphaFold3 into ${ENV_PREFIX}"
+echo "[5/8] pip-installing AlphaFold3 into ${ENV_PREFIX}"
 if ! "${ENV_PREFIX}/bin/python" -c "import alphafold3" >/dev/null 2>&1; then
+    # Install boost-cpp + zlib (C++ build deps for cifpp/pybind11)
+    conda install -y -p "${ENV_PREFIX}" -c conda-forge boost-cpp zlib
     "${ENV_PREFIX}/bin/python" -m pip install --upgrade pip
     if [ -f "${AF3_SRC}/dev-requirements.txt" ]; then
         "${ENV_PREFIX}/bin/python" -m pip install -r "${AF3_SRC}/dev-requirements.txt"
     fi
-    "${ENV_PREFIX}/bin/python" -m pip install -e "${AF3_SRC}"
+    # CMAKE_PREFIX_PATH tells CMake where to find conda env's zlib/boost headers
+    CMAKE_PREFIX_PATH="${ENV_PREFIX}" "${ENV_PREFIX}/bin/python" -m pip install -e "${AF3_SRC}"
 else
     echo "      alphafold3 already importable; skipping pip install"
 fi
 
-echo "[6/7] Decompressing weights → ${WEIGHTS_BIN}"
+echo "[6/8] Building intermediate data (CCD pickle files)"
+CCD_PICKLE="${AF3_SRC}/src/alphafold3/constants/converters/ccd.pickle"
+if [ ! -f "${CCD_PICKLE}" ]; then
+    "${ENV_PREFIX}/bin/python" -c "from alphafold3.build_data import build_data; build_data()"
+else
+    echo "      CCD pickle already exists; skipping build_data"
+fi
+
+echo "[7/8] Decompressing weights → ${WEIGHTS_BIN}"
 mkdir -p "${AF3_MODELS}"
 if [ ! -f "${WEIGHTS_BIN}" ]; then
     if [ ! -f "${WEIGHTS_ZST}" ]; then
@@ -78,7 +89,7 @@ else
     echo "      weights already present; skipping"
 fi
 
-echo "[7/7] Sanity check: importing alphafold3 from the env"
+echo "[8/8] Sanity check: importing alphafold3 from the env"
 "${ENV_PREFIX}/bin/python" -c "import alphafold3; print('alphafold3 import OK')"
 
 echo
