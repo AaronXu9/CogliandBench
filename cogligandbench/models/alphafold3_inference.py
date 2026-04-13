@@ -211,11 +211,10 @@ def _run_af3_subprocess(
     ``subprocess.TimeoutExpired`` on hard timeout. Both are caught
     by callers (run_single / run_dataset).
 
-    NOTE on CLI flag names: ``--num_diffusion_samples``, ``--num_seeds``,
-    and ``--num_recycles`` are intent — the exact spellings can drift across
-    AF3 upstream releases. Task 10 reconciles them against the actually-installed
-    version. The four core flags (--json_path, --output_dir, --model_dir,
-    --norun_data_pipeline) are stable.
+    CLI flag names verified against AF3 v3.0.1 (``run_alphafold.py --help``):
+    all eight flags (``--json_path``, ``--output_dir``, ``--model_dir``,
+    ``--norun_data_pipeline``, ``--run_inference``, ``--num_diffusion_samples``,
+    ``--num_seeds``, ``--num_recycles``) match exactly.
     """
     import subprocess
 
