@@ -236,6 +236,18 @@ def _run_af3_subprocess(
     env["CUDA_VISIBLE_DEVICES"] = str(config.get("cuda_device_index", 0))
     env["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
+    # pip-installed NVIDIA wheels put .so files under site-packages/nvidia/*/lib
+    # but they are not on LD_LIBRARY_PATH by default. JAX needs them to load
+    # the CUDA plugin (cusparse, cublas, cudnn, etc.).
+    nvidia_base = Path(config["alphafold3_env"]) / "lib" / "python3.12" / "site-packages" / "nvidia"
+    if nvidia_base.is_dir():
+        nvidia_lib_dirs = [
+            str(p / "lib") for p in nvidia_base.iterdir()
+            if (p / "lib").is_dir()
+        ]
+        existing_ld = env.get("LD_LIBRARY_PATH", "")
+        env["LD_LIBRARY_PATH"] = ":".join(nvidia_lib_dirs + ([existing_ld] if existing_ld else []))
+
     subprocess.run(
         cmd,
         env=env,
