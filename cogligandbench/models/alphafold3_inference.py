@@ -229,9 +229,14 @@ def _run_af3_subprocess(
         "--norun_data_pipeline",
         "--run_inference=true",
         f"--num_diffusion_samples={config.get('num_samples', 5)}",
-        f"--num_seeds={config.get('num_seeds', 1)}",
         f"--num_recycles={config.get('num_recycles', 10)}",
     ]
+    # --num_seeds generates N random seeds from the single seed in the JSON.
+    # AF3 requires num_seeds > 1; when num_seeds=1 (the default), omit the
+    # flag entirely and AF3 uses the modelSeeds array from the JSON as-is.
+    num_seeds = int(config.get("num_seeds", 1))
+    if num_seeds > 1:
+        cmd.append(f"--num_seeds={num_seeds}")
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = str(config.get("cuda_device_index", 0))
     env["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
