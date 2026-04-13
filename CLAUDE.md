@@ -105,7 +105,7 @@ All methods accept a `protein` PDB and `ligand` SDF as inputs. The table below s
 |--------|--------------|---------------|-----------|----------------|
 | `vina` | `rank{N}_score{S}.sdf` | Vina score (lowest best) | system | `obabel`, `vina` binary |
 | `gnina` | `pose{N}_score{S}.sdf` | CNNscore (highest best) | system | `forks/GNINA/gnina` |
-| `chai` | `pred.model_idx_{N}.pdb` | No ranking (5 models) | `forks/chai-lab/chai-lab` | `chai_lab` package |
+| `chai` | `rank{N}.sdf` | aggregate_score (highest best) | `forks/chai-lab/chai-lab` | `chai_lab` package |
 | `dynamicbind` | `rank{N}_ligand_lddt*.sdf` | DynamicBind rank | `forks/DynamicBind/DynamicBind` | `run_single_protein_inference.py` |
 | `unidock2` | `rank{N}.sdf` | Vina energy (lowest best) | `unidock2` conda env | `unidock2` command |
 | `surfdock` | `rank{N}.sdf` | Confidence (highest best) | `SurfDock` conda env | MSMS, APBS, ESM, `accelerate` |
@@ -154,9 +154,9 @@ All methods accept a `protein` PDB and `ligand` SDF as inputs. The table below s
 ### Chai-1
 
 **Input preprocessing:**
-- Protein sequence extracted from PDB (Cα atoms per chain, 3→1 letter AA code mapping via `biopandas`)
-- Ligand SMILES extracted from SDF via RDKit
-- A FASTA is constructed:
+- Protein sequence extracted from PDB via `cogligandbench.utils.sequence.extract_protein_sequence` (CA atoms, biopandas, AA3→AA1 mapping with `X` for unknowns).
+- Ligand SMILES extracted from SDF via RDKit (`Chem.SDMolSupplier` → `MolToSmiles`, canonical).
+- A Chai-compatible FASTA is constructed:
   ```
   >protein|{prefix}-chain-{i}
   {sequence}
@@ -165,12 +165,12 @@ All methods accept a `protein` PDB and `ligand` SDF as inputs. The table below s
   ```
 - This preprocessing happens internally in `run_single`. No user preparation needed.
 
-**Outputs:** `{output_dir}/pred.model_idx_{0-4}.pdb` — 5 whole-complex PDB files (protein + ligand co-folded). Also writes `{prefix}.fasta`. No confidence-based ranking is applied; all 5 models are kept.
+**Outputs:** `{output_dir}/rank{N}.sdf` — top-N ligand poses extracted from the predicted PDB/CIF files and bond-order-recovered against the input SMILES via `rdkit.Chem.AllChem.AssignBondOrdersFromTemplate`. Ranked by Chai-1's `aggregate_score` from `scores.model_idx_*.npz` (highest score = `rank1.sdf`). Intermediate Chai outputs (`pred.model_idx_*.{cif,pdb}`, `scores.model_idx_*.npz`, `{prefix}.fasta`) remain in `{output_dir}/` for post-mortem.
 
-**Post-processing:** Ligand must be extracted from the complex PDB before RMSD calculation. The ligand residue is named by the SMILES input. Use `cogligandbench/data/chai_output_extraction.py` for batch extraction.
+**Post-processing:** None — extraction is inline. SDFs are ready for downstream RMSD analysis.
 
 **Requirements:**
-- Runs in a **separate subprocess** using the chai conda env Python. Must pass `python_exec_path` (default: `python3` — override required):
+- Conda env with `chai_lab` installed. Python executable path configured via `python_exec_path` in YAML or passed as kwarg:
   ```python
   dock_engine('chai', protein=..., ligand=..., output_dir=...,
               python_exec_path='/path/to/forks/chai-lab/chai-lab/bin/python')
@@ -178,6 +178,10 @@ All methods accept a `protein` PDB and `ligand` SDF as inputs. The table below s
 - `chai_lab` package must be installed in that env (`from chai_lab.chai1 import run_inference`)
 - GPU with ≥24 GB VRAM recommended. Proteins >~500 residues may OOM on a 24 GB card.
 - Config: `cogligand_config/model/chai_inference.yaml`
+  - `cuda_device_index`: GPU to bind via `CUDA_VISIBLE_DEVICES`
+  - `num_trunk_recycles` (3), `num_diffn_timesteps` (200), `seed` (42), `use_esm_embeddings` (true): Chai-1 inference knobs
+  - `num_poses_to_keep`: how many top-ranked SDFs to write per system (default 5)
+  - `timeout_seconds`: per-system hard cap (default 3600)
 
 ---
 

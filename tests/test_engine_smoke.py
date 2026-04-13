@@ -164,8 +164,8 @@ class TestEndToEnd:
                 python_exec_path=CHAI_PYTHON,
             )
             assert result is not None
-            pdbs = glob.glob(os.path.join(result, "pred.model_idx_*.pdb"))
-            assert len(pdbs) >= 1, f"No pred.model_idx_*.pdb files found in {result}"
+            sdfs = glob.glob(os.path.join(result, "rank*.sdf"))
+            assert len(sdfs) >= 1, f"No rank*.sdf files found in {result}"
 
     def test_dynamicbind_single(self):
         with tempfile.TemporaryDirectory() as tmp:
