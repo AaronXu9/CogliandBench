@@ -39,6 +39,21 @@ Results below are RMSD < 2 Å success rates on the **runsNposes** benchmark, str
 
 The **generalization gap (Δ)** is the success-rate difference between the highest- and lowest-similarity bins. Co-folding models show 58–72 pp gaps (memorization-sensitive); hybrid and physics methods are more OOD-robust. Boltz-2 is implemented in this repo but excluded from the table because its training set overlaps the test set.
 
+### Pose Comparison: Co-folding vs Hybrid in Two Similarity Regimes
+
+Predicted poses (magenta sticks) overlaid on the crystal ligand (green sticks) and receptor (grey cartoon) for one **high-similarity** target (`7qhl__1__1.A__1.E`, SuCOS = 85.2) and one **low-similarity** target (`8cfb__1__1.A__1.L`, SuCOS = 3.0). AF3's predicted protein is aligned to the crystal receptor before showing only its ligand.
+
+| | High similarity (SuCOS 85.2) | Low similarity (SuCOS 3.0) |
+|---|---|---|
+| **AF3** (co-folding) | ![AF3 high sim](docs/figures/af3_high_sim.png) <br> RMSD = 0.19 Å (success) | ![AF3 low sim](docs/figures/af3_low_sim.png) <br> RMSD = 37.8 Å (hallucinated, far from pocket) |
+| **GNINA** (hybrid) | ![GNINA high sim](docs/figures/gnina_high_sim.png) <br> RMSD = 1.42 Å (success) | ![GNINA low sim](docs/figures/gnina_low_sim.png) <br> RMSD = 0.44 Å (success) |
+
+At high similarity both paradigms recover the native pose. At low similarity AF3 places the ligand far outside the binding site (RMSD ≈ 38 Å) while GNINA's physics-based sampling still locks into the correct pose (RMSD < 0.5 Å). This is the contrast quantified by the generalization gap in Table 1.
+
+The figures were generated with `scripts/generate_pose_comparison_figure.py`; see `docs/figures/selection_metadata.json` for the exact selection criteria.
+
+---
+
 **Conda environments by method:**
 
 Each supported method has an idempotent install script under `scripts/install_{method}_env.sh`. Running it creates the env at `/mnt/katritch_lab2/aoxu/envs/{method}` and symlinks `envs/{method}` from the project root.
