@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **CogLigandBench** is a protein-ligand docking benchmarking framework designed specifically for **crystal/experimental PDB structures** (holo structures). It evaluates docking methods against ground-truth ligand poses from the PDB.
 
-Supported methods: AutoDock Vina, GNINA, Chai-1, DynamicBind, UniDock2, SurfDock, AlphaFold3, DiffDock, FABind, NeuralPLexer, RoseTTAFold-All-Atom, ICM.
+Supported methods: AutoDock Vina, GNINA, Chai-1, DynamicBind, UniDock2, SurfDock, AlphaFold3, Boltz-1, Boltz-2, Protenix, DiffDock, FABind, NeuralPLexer, RoseTTAFold-All-Atom, ICM.
 
 Primary benchmark dataset: **runsNposes**. Additional datasets: Astex Diverse, PoseBusters, DockGen, CASP15.
 
@@ -53,6 +53,9 @@ dock_engine('chai',       protein='receptor.pdb', ligand='ligand.sdf', output_di
 dock_engine('dynamicbind',protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
 dock_engine('unidock2',   protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
 dock_engine('surfdock',   protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
+dock_engine('boltz1',     protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
+dock_engine('boltz2',     protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
+dock_engine('protenix',   protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
 ```
 
 Kwargs are merged into the method's YAML config as overrides. In single-molecule mode, results land in `output_dir/{method}/{prefix}/`. In dataset mode, results go to the path defined in the method's YAML config.
@@ -110,6 +113,9 @@ All methods accept a `protein` PDB and `ligand` SDF as inputs. The table below s
 | `unidock2` | `rank{N}.sdf` | Vina energy (lowest best) | `unidock2` conda env | `unidock2` command |
 | `surfdock` | `rank{N}.sdf` | Confidence (highest best) | `SurfDock` conda env | MSMS, APBS, ESM, `accelerate` |
 | `alphafold3` | `rank{N}.sdf` | AF3 ranking_score (highest best) | `envs/alphafold3` (symlink) | AF3 source clone, decompressed `af3.bin` weights |
+| `boltz1` | `rank{N}.sdf` | confidence_score (highest best) | `boltzina_env` conda env | `boltz` CLI binary |
+| `boltz2` | `rank{N}.sdf` | confidence_score (highest best) | `boltzina_env` conda env | `boltz` CLI binary (+ affinity prediction) |
+| `protenix` | `rank{N}.sdf` | ranking_score (highest best) | `envs/protenix` (symlink) | `protenix` CLI binary |
 
 ---
 
@@ -297,6 +303,62 @@ All methods accept a `protein` PDB and `ligand` SDF as inputs. The table below s
   - `cuda_device_index`: GPU to bind via `CUDA_VISIBLE_DEVICES`
   - `num_samples` (mapped to AF3's `--num_diffusion_samples`), `num_seeds`, `num_recycles`: AF3 inference knobs. Exact CLI flag spellings may drift across AF3 releases; reconcile against `run_alphafold.py --help` after install.
   - `num_poses_to_keep`: how many top-ranked SDFs to write per system
+  - `timeout_seconds`: per-system hard cap (default 3600)
+
+---
+
+### Boltz-1 / Boltz-2
+
+**Input preprocessing:**
+- Protein chain sequences extracted from PDB via `extract_protein_sequence()` (same utility as AF3/Chai).
+- Ligand SMILES extracted from SDF via RDKit.
+- A Boltz-compatible YAML is constructed with `version: 1`, protein entries (one per chain, `msa: "empty"` for single-sequence mode), and a ligand entry with canonical SMILES.
+- Chain IDs are assigned sequentially: A, B, ... for protein chains, next letter for the ligand.
+- For Boltz-2, a `properties: [{affinity: {binder: <ligand_chain>}}]` section is added to request affinity prediction.
+
+**Outputs:** `{output_dir}/rank{N}.sdf` — top-N ligand poses extracted from predicted mmCIF files and bond-order-recovered against the input SMILES. Ranked by Boltz's `confidence_score` from `confidence_{stem}_model_{N}.json` (highest = `rank1.sdf`). For Boltz-2, affinity predictions (`affinity_pred_value`, `affinity_probability_binary`) are attached as SDF properties. Intermediate Boltz outputs (mmCIFs, confidence JSONs, processed data) remain in `{output_dir}/boltz_results_{prefix}/` for post-mortem.
+
+**Post-processing:** None — extraction is inline. SDFs are ready for downstream RMSD analysis.
+
+**Requirements:**
+- Conda env with `boltz` CLI installed. Binary path configured via `boltz_binary` in YAML or kwarg.
+  Default: `/home/aoxu/miniconda3/envs/boltzina_env/bin/boltz`
+- GPU required.
+- Config: `cogligand_config/model/boltz1_inference.yaml` and `boltz2_inference.yaml`
+  - `model`: `"boltz1"` or `"boltz2"` (selects model variant)
+  - `cuda_device_index`: GPU to bind via `CUDA_VISIBLE_DEVICES`
+  - `diffusion_samples` (5), `recycling_steps` (3), `sampling_steps` (200), `seed` (42): inference knobs
+  - `num_poses_to_keep`: how many top-ranked SDFs to write per system (default 5)
+  - `timeout_seconds`: per-system hard cap (default 3600)
+  - Boltz-2 only: `sampling_steps_affinity` (200), `diffusion_samples_affinity` (5), `affinity_mw_correction` (false)
+
+---
+
+### Protenix
+
+**Input preprocessing:**
+- Protein chain sequences extracted from PDB via `extract_protein_sequence()`.
+- Ligand SMILES extracted from SDF via RDKit.
+- A Protenix-compatible JSON array is constructed: `[{"name": system_id, "sequences": [{"proteinChain": {"sequence": ..., "count": 1}}, {"ligand": {"ligand": SMILES, "count": 1}}]}]`.
+- Protenix uses `proteinChain` (not `protein`) and `ligand.ligand` for the SMILES field.
+- Omitting MSA fields triggers single-sequence mode.
+
+**Outputs:** `{output_dir}/rank{N}.sdf` — top-N ligand poses extracted from predicted mmCIF files and bond-order-recovered against the input SMILES. Ranked by `ranking_score` from `ranking_scores.csv` (highest = `rank1.sdf`). Intermediate outputs remain in `{output_dir}/{prefix}/` for post-mortem.
+
+**CIF chain naming:** Protenix uses `{letter}0` format chain IDs: `A0`, `B0`, `C0`. Ligand atoms have `group_PDB = HETATM`. The ligand chain is discovered automatically via HETATM scanning with bond-order recovery fallback.
+
+**Post-processing:** None — extraction is inline. SDFs are ready for downstream RMSD analysis.
+
+**Requirements:**
+- Conda env with `protenix` installed (`pip install protenix`). Requires Python 3.11+.
+  Default binary: `{PROJECT_ROOT}/envs/protenix/bin/protenix`
+- GPU required. Install script: `bash scripts/install_protenix_env.sh`
+- Models auto-download to `~/.protenix` on first run.
+- Config: `cogligand_config/model/protenix_inference.yaml`
+  - `model_name`: `"protenix-v2"` (default) or `"protenix_base_default_v1.0.0"`
+  - `cuda_device_index`: GPU to bind via `CUDA_VISIBLE_DEVICES`
+  - `seeds`: comma-separated seed list (default `"42"`)
+  - `num_poses_to_keep`: how many top-ranked SDFs to write per system (default 5)
   - `timeout_seconds`: per-system hard cap (default 3600)
 
 ---

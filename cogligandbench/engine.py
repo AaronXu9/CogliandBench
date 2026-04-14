@@ -18,11 +18,14 @@ Usage from a notebook or script:
     dock_engine('unidock2',    protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
     dock_engine('surfdock',    protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
     dock_engine('alphafold3',  protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
+    dock_engine('boltz1',      protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
+    dock_engine('boltz2',      protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
+    dock_engine('protenix',    protein='receptor.pdb', ligand='ligand.sdf', output_dir='./out')
 
     # Pass any config override as a kwarg:
     dock_engine('vina', dataset='runsNposes', top_n=5, exhaustiveness=16)
 
-Available methods: vina, gnina, chai, dynamicbind, unidock2, surfdock, alphafold3
+Available methods: vina, gnina, chai, dynamicbind, unidock2, surfdock, alphafold3, boltz1, boltz2, protenix
 """
 
 import importlib
@@ -34,7 +37,7 @@ from omegaconf import OmegaConf
 
 _PROJECT_ROOT = str(rootutils.find_root(search_from=__file__, indicator=".project-root"))
 
-SUPPORTED_METHODS = ("vina", "gnina", "chai", "dynamicbind", "unidock2", "surfdock", "alphafold3")
+SUPPORTED_METHODS = ("vina", "gnina", "chai", "dynamicbind", "unidock2", "surfdock", "alphafold3", "boltz1", "boltz2", "protenix")
 
 _CONFIG_PATHS = {
     "vina":         os.path.join(_PROJECT_ROOT, "cogligand_config", "model", "vina_inference.yaml"),
@@ -44,6 +47,9 @@ _CONFIG_PATHS = {
     "unidock2":     os.path.join(_PROJECT_ROOT, "cogligand_config", "model", "unidock2_inference.yaml"),
     "surfdock":     os.path.join(_PROJECT_ROOT, "cogligand_config", "model", "surfdock_inference.yaml"),
     "alphafold3":   os.path.join(_PROJECT_ROOT, "cogligand_config", "model", "alphafold3_inference.yaml"),
+    "boltz1":       os.path.join(_PROJECT_ROOT, "cogligand_config", "model", "boltz1_inference.yaml"),
+    "boltz2":       os.path.join(_PROJECT_ROOT, "cogligand_config", "model", "boltz2_inference.yaml"),
+    "protenix":     os.path.join(_PROJECT_ROOT, "cogligand_config", "model", "protenix_inference.yaml"),
 }
 
 _METHOD_MODULES = {
@@ -54,6 +60,9 @@ _METHOD_MODULES = {
     "unidock2":    "cogligandbench.models.unidock2_inference",
     "surfdock":    "cogligandbench.models.surfdock_inference",
     "alphafold3":  "cogligandbench.models.alphafold3_inference",
+    "boltz1":      "cogligandbench.models.boltz_inference",
+    "boltz2":      "cogligandbench.models.boltz_inference",
+    "protenix":    "cogligandbench.models.protenix_inference",
 }
 
 
