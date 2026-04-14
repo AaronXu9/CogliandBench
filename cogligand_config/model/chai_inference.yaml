@@ -13,7 +13,8 @@ input_dir: ${oc.env:PROJECT_ROOT}/data/${dataset}
 output_dir: ${oc.env:PROJECT_ROOT}/forks/chai-lab/prediction_outputs/${dataset}_${repeat_index}
 
 # Environment (REQUIRED — path to Python executable in the chai-lab conda env)
-python_exec_path: ${oc.env:PROJECT_ROOT}/forks/chai-lab/chai-lab/bin/python
+# Created by scripts/install_chai_env.sh which symlinks envs/chai → /mnt/katritch_lab2/aoxu/envs/chai
+python_exec_path: ${oc.env:PROJECT_ROOT}/envs/chai/bin/python
 
 # Inference knobs
 cuda_device_index: 0

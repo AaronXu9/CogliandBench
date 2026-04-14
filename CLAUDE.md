@@ -6,11 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **CogLigandBench** is a protein-ligand docking benchmarking framework designed specifically for **crystal/experimental PDB structures** (holo structures). It evaluates docking methods against ground-truth ligand poses from the PDB.
 
-Supported methods: AutoDock Vina, GNINA, Chai-1, DynamicBind, UniDock2, SurfDock, AlphaFold3, Boltz-1, Boltz-2, Protenix, DiffDock, FABind, NeuralPLexer, RoseTTAFold-All-Atom, ICM.
+> **Paper:** `docs/A_Multi-Paradigm_Benchmark_main_v8.docx` — Xu et al., *A Multi-Paradigm Benchmark of Molecular Docking: From Physics to Co-folding and Hybrid Models*. The paper benchmarks 9 of the supported methods (AF3, Boltz-1, Chai-1, Protenix, GNINA, ICM-RTCNN, ICM, Vina, Uni-Dock) on the runsNposes dataset stratified by SuCOS similarity to pre-2021 training data. Boltz-2 is implemented but excluded from the paper because its training set overlaps the test set.
 
-Primary benchmark dataset: **runsNposes**. Additional datasets: Astex Diverse, PoseBusters, DockGen, CASP15.
+Supported methods (all reachable via `dock_engine`): AutoDock Vina, Uni-Dock2, GNINA, ICM, ICM-RTCNN, DynamicBind, SurfDock, AlphaFold3, Chai-1, Boltz-1, Boltz-2, Protenix.
 
-> **Note:** This repo was forked from [PoseBench](https://github.com/BioinfoMachineLearning/PoseBench), which targets predicted/AlphaFold structures. CogLigandBench strips out the `posebench` package and focuses entirely on crystal-structure workflows via `cogligandbench`.
+Primary benchmark dataset: **runsNposes** (~1,280 systems). Secondary: **plinder test set** (~1,038 systems).
+
+> **Note:** This repo was originally seeded from [PoseBench](https://github.com/BioinfoMachineLearning/PoseBench) (Morehead et al., 2024) and has since been extensively rewritten for crystal-structure workflows in the `cogligandbench` package.
 
 ---
 
@@ -79,23 +81,24 @@ cogligand_config/       # Hydra/OmegaConf YAML configs
   data/                 # input prep / output extraction configs
   analysis/             # analysis configs
 
+envs/                   # symlinks to per-method conda envs (created by install scripts)
+  alphafold3/, protenix/, boltz/, chai/, vina/, gnina/,
+  dynamicbind/, unidock2/, surfdock/
+
 forks/                  # third-party method codebases (git submodules / forks)
+  alphafold3/           # AlphaFold3 source + decompressed af3.bin weights
   GNINA/                # GNINA binary
   Vina/                 # AutoDock Vina + ADFR suite
-  DynamicBind/          # DynamicBind diffusion docking (conda env inside)
-  chai-lab/             # Chai-1 (conda env inside)
+  DynamicBind/          # DynamicBind diffusion docking (bundled env inside)
+  chai-lab/             # Chai-1 source
   UniDock2/             # UniDock2 unified docking
   SurfDock/             # SurfDock submodule (code + model weights only)
-  ICM/                  # ICM docking scripts (actively developed)
-  alphafold3/, boltz/,  # Other methods
-  DiffDock/, FABind/, ...
+  ICM/                  # ICM docking scripts (commercial binary required)
+  boltz/                # Boltz support files (input prep, extraction)
 
-data/                   # Benchmark datasets (crystal structures)
-  runsNposes/
-  astex_diverse_set/
-  posebusters_benchmark_set/
-  dockgen_set/
-  casp15_set/
+data/                   # Benchmark datasets (crystal structures, not in git)
+  runsNposes/           # primary benchmark
+  plinder_set/          # secondary validation
 ```
 
 ---
@@ -104,18 +107,21 @@ data/                   # Benchmark datasets (crystal structures)
 
 All methods accept a `protein` PDB and `ligand` SDF as inputs. The table below summarizes the key differences.
 
-| Method | Output format | Ranking metric | Conda env | Key dependency |
-|--------|--------------|---------------|-----------|----------------|
-| `vina` | `rank{N}_score{S}.sdf` | Vina score (lowest best) | system | `obabel`, `vina` binary |
-| `gnina` | `pose{N}_score{S}.sdf` | CNNscore (highest best) | system | `forks/GNINA/gnina` |
-| `chai` | `rank{N}.sdf` | aggregate_score (highest best) | `forks/chai-lab/chai-lab` | `chai_lab` package |
-| `dynamicbind` | `rank{N}_ligand_lddt*.sdf` | DynamicBind rank | `forks/DynamicBind/DynamicBind` | `run_single_protein_inference.py` |
-| `unidock2` | `rank{N}.sdf` | Vina energy (lowest best) | `unidock2` conda env | `unidock2` command |
-| `surfdock` | `rank{N}.sdf` | Confidence (highest best) | `SurfDock` conda env | MSMS, APBS, ESM, `accelerate` |
-| `alphafold3` | `rank{N}.sdf` | AF3 ranking_score (highest best) | `envs/alphafold3` (symlink) | AF3 source clone, decompressed `af3.bin` weights |
-| `boltz1` | `rank{N}.sdf` | confidence_score (highest best) | `boltzina_env` conda env | `boltz` CLI binary |
-| `boltz2` | `rank{N}.sdf` | confidence_score (highest best) | `boltzina_env` conda env | `boltz` CLI binary (+ affinity prediction) |
-| `protenix` | `rank{N}.sdf` | ranking_score (highest best) | `envs/protenix` (symlink) | `protenix` CLI binary |
+All envs live under `envs/{method}/` (symlinks created by `scripts/install_{method}_env.sh`). ICM is physics-based and uses the commercial ICM binary on `$PATH` with no managed env.
+
+| Method | Output format | Ranking metric | Env | Key dependency |
+|--------|--------------|---------------|-----|----------------|
+| `vina` | `rank{N}_score{S}.sdf` | Vina score (lowest best) | `envs/vina` | `obabel`, `vina` binary |
+| `gnina` | `pose{N}_score{S}.sdf` | CNNscore (highest best) | `envs/gnina` (wraps `forks/GNINA/`) | `gnina` binary |
+| `chai` | `rank{N}.sdf` | aggregate_score (highest best) | `envs/chai` | `chai_lab` package |
+| `dynamicbind` | `rank{N}_ligand_lddt*.sdf` | DynamicBind rank | `envs/dynamicbind` (wraps `forks/DynamicBind/`) | `run_single_protein_inference.py` |
+| `unidock2` | `rank{N}.sdf` | Vina energy (lowest best) | `envs/unidock2` | `unidock2` command |
+| `surfdock` | `rank{N}.sdf` | Confidence (highest best) | `envs/surfdock` | MSMS, APBS, ESM, `accelerate` |
+| `alphafold3` | `rank{N}.sdf` | AF3 ranking_score (highest best) | `envs/alphafold3` | AF3 source clone, decompressed `af3.bin` weights |
+| `boltz1` | `rank{N}.sdf` | confidence_score (highest best) | `envs/boltz` | `boltz` CLI binary |
+| `boltz2` | `rank{N}.sdf` | confidence_score (highest best) | `envs/boltz` | `boltz` CLI binary (+ affinity prediction) |
+| `protenix` | `rank{N}.sdf` | ranking_score (highest best) | `envs/protenix` | `protenix` CLI binary |
+| `icm` | `rank{N}.sdf` | ICM score | system | commercial ICM binary on `$PATH` |
 
 ---
 
@@ -322,7 +328,7 @@ All methods accept a `protein` PDB and `ligand` SDF as inputs. The table below s
 
 **Requirements:**
 - Conda env with `boltz` CLI installed. Binary path configured via `boltz_binary` in YAML or kwarg.
-  Default: `/home/aoxu/miniconda3/envs/boltzina_env/bin/boltz`
+  Default: `${PROJECT_ROOT}/envs/boltz/bin/boltz`. Install via `bash scripts/install_boltz_env.sh`.
 - GPU required.
 - Config: `cogligand_config/model/boltz1_inference.yaml` and `boltz2_inference.yaml`
   - `model`: `"boltz1"` or `"boltz2"` (selects model variant)

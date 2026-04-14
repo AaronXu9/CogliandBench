@@ -16,7 +16,7 @@ input_dir: ${oc.env:PROJECT_ROOT}/data/${dataset}
 output_dir: ${oc.env:PROJECT_ROOT}/forks/boltz/prediction_outputs/boltz2_${dataset}_${repeat_index}
 
 # Boltz binary and model variant
-boltz_binary: /home/aoxu/miniconda3/envs/boltzina_env/bin/boltz
+boltz_binary: ${oc.env:PROJECT_ROOT}/envs/boltz/bin/boltz
 model: boltz2
 
 # Inference knobs

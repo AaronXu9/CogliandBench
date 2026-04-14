@@ -15,39 +15,46 @@ Most docking benchmarks pair a ligand with an AlphaFold-predicted or homology-mo
 
 | Dataset | Systems | Source |
 |---------|---------|--------|
-| runsNposes | ~1,280 | [runs-n-poses](https://github.com/plinder-org/runs-n-poses) |
-| Astex Diverse | 85 | PDB (curated fragment set) |
-| PoseBusters | 428 | [posebusters](https://github.com/maabuu/posebusters) |
-| DockGen | 189 | [DockGen](https://github.com/HannesStark/DockGen) |
+| runsNposes | ~1,280 | [runs-n-poses](https://github.com/plinder-org/runs-n-poses) — primary benchmark |
+| Plinder test set | ~1,038 | [plinder](https://www.plinder.sh/) — secondary validation |
 
 ---
 
-## Supported Methods & Preliminary Results
+## Supported Methods & Benchmark Results
 
-Results below are **top-1 pose, runsNposes benchmark** (crystal structures, no structure prediction).
+Results below are RMSD < 2 Å success rates on the **runsNposes** benchmark, stratified by SuCOS similarity to pre-2021 training data. Source: paper Table 1 (Xu et al., *A Multi-Paradigm Benchmark of Molecular Docking*, see `docs/A_Multi-Paradigm_Benchmark_main_v8.docx`).
 
-| Method | Type | % ≤ 2 Å RMSD | Median RMSD |
-|--------|------|-------------|-------------|
-| SurfDock | Deep learning | 59.5% | 1.56 Å |
-| GNINA | CNN scoring | 33.9% | 2.56 Å |
-| ICM-RTCNN | Physics + ML | 27.5% | 3.42 Å |
-| ICM | Physics-based | 25.7% | 3.69 Å |
-| Vina | Physics-based | 7.5% | 7.43 Å |
-| UniDock2 | Physics-based | 2.0%† | 24.35 Å† |
+| Category | Method | Success 0–20% (%) | Success 80–100% (%) | Gap Δ (pp) |
+|----------|--------|-------------------|---------------------|------------|
+| Reference  | Best Possible | 89 | 100 | +11 |
+| Co-folding | AlphaFold3    | 38 |  96 | +58 |
+| Co-folding | Boltz-1       | 22 |  94 | +72 |
+| Co-folding | Chai-1        | 25 |  94 | +69 |
+| Co-folding | Protenix      | 27 |  92 | +65 |
+| Hybrid     | GNINA         | 62 |  89 | +27 |
+| Hybrid     | ICM-RTCNN     | 67 |  79 | +12 |
+| Physics    | ICM           | 53 |  71 | +18 |
+| Physics    | Vina          | 18 |  31 | +13 |
+| Physics    | Uni-Dock      | 12 |  27 | +15 |
 
-†UniDock2 result is tentative — run artifact under investigation.
+The **generalization gap (Δ)** is the success-rate difference between the highest- and lowest-similarity bins. Co-folding models show 58–72 pp gaps (memorization-sensitive); hybrid and physics methods are more OOD-robust. Boltz-2 is implemented in this repo but excluded from the table because its training set overlaps the test set.
 
 **Conda environments by method:**
 
-| Method | Conda env | Notes |
-|--------|-----------|-------|
-| `vina` | system | Needs `obabel`, `vina` on `$PATH` |
-| `gnina` | system | Binary at `forks/GNINA/gnina` |
-| `chai` | `forks/chai-lab/chai-lab/` | Pass `python_exec_path=` to `dock_engine` |
-| `dynamicbind` | `forks/DynamicBind/DynamicBind/` | Path set in YAML config |
-| `unidock2` | `unidock2` | `conda create -n unidock2 -c conda-forge unidock` |
-| `surfdock` | `SurfDock` | Requires MSMS/APBS/pdb2pqr tools |
-| `icm` | system | Requires commercial ICM license |
+Each supported method has an idempotent install script under `scripts/install_{method}_env.sh`. Running it creates the env at `/mnt/katritch_lab2/aoxu/envs/{method}` and symlinks `envs/{method}` from the project root.
+
+| Method | Install script | Env path (after install) |
+|--------|----------------|--------------------------|
+| `alphafold3` | `scripts/install_alphafold3_env.sh` | `envs/alphafold3/` |
+| `protenix`   | `scripts/install_protenix_env.sh`   | `envs/protenix/` |
+| `boltz1`/`boltz2` | `scripts/install_boltz_env.sh` | `envs/boltz/` |
+| `chai`       | `scripts/install_chai_env.sh`       | `envs/chai/` |
+| `vina`       | `scripts/install_vina_env.sh`       | `envs/vina/` |
+| `gnina`      | `scripts/install_gnina_env.sh`      | `envs/gnina/` (wraps `forks/GNINA/`) |
+| `dynamicbind`| `scripts/install_dynamicbind_env.sh`| `envs/dynamicbind/` (wraps `forks/DynamicBind/`) |
+| `unidock2`   | `scripts/install_unidock2_env.sh`   | `envs/unidock2/` |
+| `surfdock`   | `scripts/install_surfdock_env.sh`   | `envs/surfdock/` |
+| `icm`        | — | physics-based; uses commercial ICM binary on `$PATH` |
 
 ---
 
@@ -119,19 +126,22 @@ cogligand_config/       # Hydra/OmegaConf YAML configs
   model/                # per-method inference configs
 
 data/                   # benchmark datasets (crystal structures, not in git)
-  runsNposes/
-  astex_diverse_set/
-  posebusters_benchmark_set/
-  dockgen_set/
+  runsNposes/           # primary benchmark
+  plinder_set/          # secondary validation
+
+envs/                   # symlinks to per-method conda envs (created by install scripts)
+  alphafold3/, protenix/, boltz/, chai/, vina/, gnina/, ...
 
 forks/                  # third-party codebases (submodules / local installs)
+  alphafold3/           # AlphaFold3 source + weights
   GNINA/                # GNINA binary
   Vina/                 # AutoDock Vina + ADFR suite
   DynamicBind/          # DynamicBind diffusion docking
-  chai-lab/             # Chai-1
+  chai-lab/             # Chai-1 source
   UniDock2/             # UniDock2
   SurfDock/             # SurfDock (code + weights; tools installed separately)
-  ICM/                  # ICM docking scripts
+  ICM/                  # ICM docking scripts (commercial binary required)
+  boltz/                # Boltz support files (input prep, extraction)
 
 docs/                   # documentation
 tests/                  # pytest suite (fast smoke tests + slow end-to-end)
@@ -139,17 +149,17 @@ tests/                  # pytest suite (fast smoke tests + slow end-to-end)
 
 ---
 
-## Citation & Acknowledgements
+## Citation
 
 If you use CogLigandBench, please cite:
 
 ```bibtex
-@software{cogligandbench2024,
-  author  = {Xu, Aaron and others},
-  title   = {CogLigandBench: Crystal-Structure Protein-Ligand Docking Benchmark},
-  year    = {2024},
-  url     = {https://github.com/AaronXu9/CogliandBench},
+@article{xu2026multiparadigm,
+  author  = {Xu, Ao and Lam, Jordy Homing and Nakano, Aiichiro and Katritch, Vsevolod},
+  title   = {A Multi-Paradigm Benchmark of Molecular Docking: From Physics to Co-folding and Hybrid Models},
+  year    = {2026},
+  note    = {Manuscript; data and code at \url{https://zenodo.org/records/16754298} and \url{https://github.com/AaronXu9/CogligandBench}},
 }
 ```
 
-CogLigandBench was built on top of [PoseBench](https://github.com/BioinfoMachineLearning/PoseBench) (Morehead et al., 2024), which targets predicted/AlphaFold structures.
+The codebase was originally seeded from [PoseBench](https://github.com/BioinfoMachineLearning/PoseBench) (Morehead et al., 2024) and has since been extensively rewritten for crystal-structure benchmarks.
