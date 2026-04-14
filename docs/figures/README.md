@@ -11,7 +11,7 @@ Visualizations referenced by the top-level `README.md`.
 | `af3_low_sim.png`    | AlphaFold3 | Low (SuCOS 3.0)   | `8cfb__1__1.A__1.L` |
 | `gnina_low_sim.png`  | GNINA      | Low (SuCOS 3.0)   | `8cfb__1__1.A__1.L` |
 
-Predicted ligand: **magenta sticks**. Crystal ligand: **green sticks**. Receptor: **grey cartoon**.
+Predicted ligand: **magenta sticks**. Crystal ligand: **green sticks**. Receptor: **grey cartoon**. Binding-pocket residues (within 5 Å of the crystal ligand): **thin white sticks**. Panels are framed on the native binding pocket — for the AF3 low-sim case the predicted ligand is ~38 Å away and therefore off-screen.
 
 ## How to regenerate
 

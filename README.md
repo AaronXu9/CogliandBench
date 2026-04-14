@@ -41,7 +41,7 @@ The **generalization gap (Δ)** is the success-rate difference between the highe
 
 ### Pose Comparison: Co-folding vs Hybrid in Two Similarity Regimes
 
-Predicted poses (magenta sticks) overlaid on the crystal ligand (green sticks) and receptor (grey cartoon) for one **high-similarity** target (`7qhl__1__1.A__1.E`, SuCOS = 85.2) and one **low-similarity** target (`8cfb__1__1.A__1.L`, SuCOS = 3.0). AF3's predicted protein is aligned to the crystal receptor before showing only its ligand.
+Predicted poses (magenta sticks) overlaid on the crystal ligand (green sticks) and receptor (grey cartoon) for one **high-similarity** target (`7qhl__1__1.A__1.E`, SuCOS = 85.2) and one **low-similarity** target (`8cfb__1__1.A__1.L`, SuCOS = 3.0). Binding-pocket residues within 5 Å of the crystal ligand are drawn as thin white sticks for context. AF3's predicted protein is aligned to the crystal receptor before showing only its ligand; panels are framed on the native binding pocket, so AF3's low-sim pose is off-screen (placed ≈38 Å away, see caption below).
 
 | | High similarity (SuCOS 85.2) | Low similarity (SuCOS 3.0) |
 |---|---|---|

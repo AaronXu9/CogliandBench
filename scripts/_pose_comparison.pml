@@ -54,14 +54,29 @@ cmd.show("sticks", "pred_lig")
 cmd.color("magenta", "pred_lig")
 cmd.util.cnc("pred_lig")
 
-# Frame on the union of crystal and predicted ligand so both are visible
+# Binding-pocket residues within 5 A of the crystal ligand (polymer only,
+# excludes waters and the crystal ligand itself). Thin white sticks keep
+# them visible but visually subordinate to the green/magenta ligands.
+cmd.select("pocket", "receptor and polymer and byres (all within 5 of crystal_lig)")
+cmd.show("sticks", "pocket")
+cmd.color("white", "pocket")
+cmd.util.cnc("pocket")
+cmd.set("stick_radius", 0.10, "pocket")
+
+# Thicken the ligand sticks slightly so they pop against the pocket sticks
+cmd.set("stick_radius", 0.20, "crystal_lig or pred_lig")
+
+# Orient with both ligands so the view angle is sensible, then zoom on just
+# the crystal ligand + pocket. This keeps the pocket detail visible even when
+# the predicted ligand is misplaced far from the native site (low-sim AF3 case).
 cmd.orient("crystal_lig or pred_lig")
-cmd.zoom("crystal_lig or pred_lig", 6)
+cmd.zoom("crystal_lig", 6)
 
 cmd.set("ray_opaque_background", 0)
 cmd.set("ray_shadows", 0)
 cmd.set("specular", 0.2)
 cmd.set("cartoon_transparency", 0.3)
+cmd.set("cartoon_side_chain_helper", 1)
 
 cmd.ray(1200, 900)
 cmd.png(output, dpi=150)
